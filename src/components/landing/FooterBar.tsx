@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { useNavigate, useLocation } from "react-router-dom";
+import { MakerFooter } from "./MakerFooter";
 
 export function FooterBar() {
   const navigate = useNavigate();
@@ -184,6 +185,9 @@ export function FooterBar() {
             Powered by Claude AI • Content-Extraktion mit Jina & Firecrawl • Newsletter zu Social Media in Sekunden
           </p>
         </div>
+
+        {/* Maker Footer - Cross-links to other projects */}
+        <MakerFooter />
       </div>
     </footer>
   );
