@@ -84,7 +84,7 @@ export function BootstrapAuthLink() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-  <BootstrapAuthLink />
+      <BootstrapAuthLink />
       <App />
     </BrowserRouter>
   </StrictMode>,

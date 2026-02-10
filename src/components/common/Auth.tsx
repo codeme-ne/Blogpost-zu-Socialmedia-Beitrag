@@ -56,7 +56,7 @@ export function Auth() {
       if (authMode === 'register') {
         const { error, data } = await signUpWithPassword(email, password)
         if (error) {
-          const errorMsg = error?.message || String(error)
+          const errorMsg = error instanceof Error ? error.message : String(error)
           if (errorMsg.includes('already') || errorMsg.includes('exist')) {
             toast.error('E-Mail bereits registriert - Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich an oder verwende eine andere E-Mail.')
           } else {
@@ -69,7 +69,7 @@ export function Auth() {
       } else {
         const { error, data } = await signInWithPassword(email, password)
         if (error) {
-          const errorMsg = error?.message || String(error)
+          const errorMsg = error instanceof Error ? error.message : String(error)
           if (errorMsg.includes('Invalid') || errorMsg.includes('credentials') || errorMsg.includes('password')) {
             toast.error('Anmeldung fehlgeschlagen - E-Mail oder Passwort ist falsch. Bitte ueberpruefe deine Eingaben.')
           } else {

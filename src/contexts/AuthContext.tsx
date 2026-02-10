@@ -19,7 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
     } catch (error) {
-      console.error('Error refreshing session:', error);
+      if (import.meta.env.DEV) console.error('Error refreshing session:', error);
       setUser(null);
     }
   };
@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const currentUser = await getCurrentUser();
         setUser(currentUser);
       } catch (error) {
-        console.error('Error loading initial session:', error);
+        if (import.meta.env.DEV) console.error('Error loading initial session:', error);
       } finally {
         setLoading(false);
       }

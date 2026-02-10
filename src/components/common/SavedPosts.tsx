@@ -138,6 +138,7 @@ const PostCard = memo(({ post, editingPost, onEdit, onDelete, onStartEdit, onCan
     </div>
   )
 })
+PostCard.displayName = 'PostCard'
 
 const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuthenticated, onLoginClick, initialExpanded, inline }: SavedPostsProps) {
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([])
@@ -180,8 +181,8 @@ const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuth
     try {
       await deleteSavedPost(id)
       setSavedPosts(posts => posts.filter(p => p.id !== id))
-    } catch (error) {
-      // Error will be handled by UI - show unchanged state
+    } catch {
+      toast.error('Beitrag konnte nicht gelöscht werden.')
     }
   }
 
@@ -192,8 +193,8 @@ const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuth
         p.id === id ? { ...p, content: newContent } : p
       ))
       setEditingPost(null)
-    } catch (error) {
-      // Error handling - editing state remains active
+    } catch {
+      toast.error('Beitrag konnte nicht aktualisiert werden.')
     }
   }
 

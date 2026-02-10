@@ -84,7 +84,7 @@ export function useSubscription() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Fehler beim Laden der Subscription';
       setError(errorMessage);
-      console.error('Subscription fetch error:', err);
+      if (import.meta.env.DEV) console.error('Subscription fetch error:', err);
     } finally {
       setLoading(false);
     }
@@ -109,7 +109,7 @@ export function useSubscription() {
       // Open in same window to maintain session
       window.location.href = url;
     } catch (error) {
-      console.error('Customer portal error:', error);
+      if (import.meta.env.DEV) console.error('Customer portal error:', error);
       toast.error('Customer Portal konnte nicht geoeffnet werden. Versuche es spaeter erneut.');
     }
   };
@@ -160,7 +160,7 @@ export function useSubscription() {
         }
         keysToRemove.forEach(key => localStorage.removeItem(key))
       } catch (e) {
-        console.warn('Failed to cleanup localStorage:', e)
+        if (import.meta.env.DEV) console.warn('Failed to cleanup localStorage:', e)
       }
     }
 

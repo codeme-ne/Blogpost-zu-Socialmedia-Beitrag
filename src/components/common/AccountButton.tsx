@@ -37,7 +37,7 @@ export function AccountButton({ className }: AccountButtonProps) {
           setEmail(data.session.user.email);
         }
       } catch (error) {
-        console.error("Failed to load user data:", error);
+        if (import.meta.env.DEV) console.error("Failed to load user data:", error);
       }
     }
   };
@@ -54,7 +54,7 @@ export function AccountButton({ className }: AccountButtonProps) {
       toast.success("Erfolgreich abgemeldet");
       navigate("/");
     } catch (error) {
-      console.error("Logout error:", error);
+      if (import.meta.env.DEV) console.error("Logout error:", error);
       toast.error("Fehler beim Abmelden");
     } finally {
       setIsLogoutLoading(false);
@@ -72,7 +72,7 @@ export function AccountButton({ className }: AccountButtonProps) {
     try {
       await openCustomerPortal();
     } catch (error) {
-      console.error("Portal error:", error);
+      if (import.meta.env.DEV) console.error("Portal error:", error);
       // Error is already handled by the hook
     } finally {
       setIsPortalLoading(false);

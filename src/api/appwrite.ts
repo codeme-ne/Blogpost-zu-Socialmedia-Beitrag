@@ -185,7 +185,7 @@ export const signUpWithPassword = async (email: string, password: string) => {
       },
       error: null,
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     return { data: { user: null, session: null }, error }
   }
 }
@@ -202,7 +202,7 @@ export const signInWithPassword = async (email: string, password: string) => {
       },
       error: null,
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     return { data: { user: null, session: null }, error }
   }
 }

@@ -87,7 +87,7 @@ export function checkRequiredClientVars(): EnvironmentValidationResult {
 /**
  * Validate server-side environment variables (Node.js)
  */
-export function validateServerEnvironment(): EnvironmentValidationResult {
+export function checkServerVars(): EnvironmentValidationResult {
   if (typeof process === 'undefined') {
     return { isValid: false, missing: ['Node.js environment required'], warnings: [] };
   }
@@ -267,20 +267,20 @@ export const env = {
   get: getEnvVar,
   getWithFallback: getEnvVarWithFallback,
 
-  // Configuration objects
-  appwrite: getAppwriteConfig(),
-  claude: getClaudeConfig(),
-  linkedin: getLinkedInConfig(),
-  stripe: getStripePaymentLinks(),
-  urls: getAppUrls(),
-  app: getAppConfig(),
+  // Configuration objects (lazy — evaluated on access, not at import time)
+  get appwrite() { return getAppwriteConfig() },
+  get claude() { return getClaudeConfig() },
+  get linkedin() { return getLinkedInConfig() },
+  get stripe() { return getStripePaymentLinks() },
+  get urls() { return getAppUrls() },
+  get app() { return getAppConfig() },
 
-  // Environment checks
-  isDev: isDevelopment(),
-  isProd: isProduction(),
+  // Environment checks (lazy)
+  get isDev() { return isDevelopment() },
+  get isProd() { return isProduction() },
 
   // Validation
   validate: checkRequiredClientVars,
-  validateServer: validateServerEnvironment,
+  validateServer: checkServerVars,
   init: initializeEnvironment
 } as const;

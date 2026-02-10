@@ -61,7 +61,7 @@ export default function SignUp() {
 
         {/* Footer */}
         <footer className="py-6 text-center text-sm text-muted-foreground border-t border-slate-200 dark:border-slate-800 mt-12">
-          <p>© 2025 Social Transformer • Newsletter zu Social Media Posts</p>
+          <p>© 2026 Social Transformer • Newsletter zu Social Media Posts</p>
         </footer>
       </div>
     </div>
