@@ -51,3 +51,4 @@ screenshots/
 supabase/.branches
 supabase/.temp
 .vercel
+.env*.local
