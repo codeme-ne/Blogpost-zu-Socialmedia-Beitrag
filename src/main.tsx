@@ -3,81 +3,79 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { BrowserRouter } from 'react-router-dom'
-import { supabase } from './api/supabase.ts'
-import { validateClientEnvironment } from '@/lib/env-validation'
+import { createJWT, verifyMagicURL } from './api/appwrite.ts'
+import { checkRequiredClientVars } from '@/lib/env-validation'
 
 // Validate environment variables on startup
-const envValidation = validateClientEnvironment();
-if (!envValidation.success) {
-  console.error('Configuration Error:', envValidation.error);
+const envValidation = checkRequiredClientVars();
+if (!envValidation.isValid) {
+  const errorMessage = `Missing required environment variables: ${envValidation.missing.join(', ')}`;
+  console.error('Configuration Error:', errorMessage);
 
-  // Create error display for missing configuration
-  const errorDiv = document.createElement('div');
-  errorDiv.innerHTML = `
-    <div style="
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: #fee; color: #900;
-      padding: 2rem; font-family: monospace;
-      display: flex; align-items: center; justify-content: center;
-      flex-direction: column; z-index: 9999;
-    ">
-      <h1 style="margin-bottom: 1rem;">⚠️ Configuration Error</h1>
-      <pre style="background: #fff; padding: 1rem; border-radius: 4px; max-width: 800px; overflow: auto;">
-${envValidation.error}
-      </pre>
-      <p style="margin-top: 1rem;">Please check your .env file and ensure all required variables are set.</p>
-    </div>
-  `;
-  document.body.appendChild(errorDiv);
+  // Create error display using safe DOM methods (no innerHTML to avoid XSS)
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#fee;color:#900;padding:2rem;font-family:monospace;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;';
+
+  const h1 = document.createElement('h1');
+  h1.style.marginBottom = '1rem';
+  h1.textContent = 'Configuration Error';
+
+  const pre = document.createElement('pre');
+  pre.style.cssText = 'background:#fff;padding:1rem;border-radius:4px;max-width:800px;overflow:auto;';
+  pre.textContent = errorMessage;
+
+  const p = document.createElement('p');
+  p.style.marginTop = '1rem';
+  p.textContent = 'Please check your .env file and ensure all required variables are set.';
+
+  container.append(h1, pre, p);
+  document.body.appendChild(container);
   throw new Error('Environment validation failed');
 }
 
-// Handles Supabase email confirmation links (hash in URL),
-// reconciles pending subscriptions immediately, cleans URL, and redirects.
+// Handles Appwrite Magic URL verification and subscription reconciliation.
+// When user clicks a Magic URL link, the URL contains userId and secret params.
 export function BootstrapAuthLink() {
   useEffect(() => {
-    const hasAuthHash = typeof window !== 'undefined' && window.location.hash.includes('access_token=')
-    if (!hasAuthHash) return
+    const url = new URL(window.location.href)
+    const userId = url.searchParams.get('userId')
+    const secret = url.searchParams.get('secret')
 
-    const cleanupHash = () => {
-      const cleanUrl = window.location.pathname + window.location.search
-      window.history.replaceState({}, document.title, cleanUrl)
+    // Check for Magic URL callback
+    if (!userId || !secret) return
+
+    const cleanupParams = () => {
+      url.searchParams.delete('userId')
+      url.searchParams.delete('secret')
+      window.history.replaceState({}, document.title, url.pathname + url.search)
     }
 
-  const attemptReconcile = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return false
+    const attemptReconcile = async () => {
+      const jwt = await createJWT()
+      if (!jwt) return false
       try {
-    const resp = await fetch('/api/reconcile-subscription', {
+        const resp = await fetch('/api/reconcile-subscription', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${session.access_token}` },
-    })
-    const json = await resp.json().catch(() => ({})) as { activated?: number }
-    return !!json?.activated
+          headers: { Authorization: `Bearer ${jwt}` },
+        })
+        const json = await resp.json().catch(() => ({})) as { activated?: number }
+        return !!json?.activated
       } catch {
-        // non-blocking
-    return false
+        return false
       }
     }
 
-    // Try immediately; if not signed yet, wait for SIGNED_IN
-    attemptReconcile().then((activated) => {
-      if (activated) {
-        cleanupHash()
-        window.location.replace('/app?welcome=1')
+    // Verify the magic URL session
+    verifyMagicURL(userId, secret).then(async ({ error }) => {
+      if (error) {
+        console.error('Magic URL verification failed:', error)
+        cleanupParams()
         return
       }
-      const { data: sub } = supabase.auth.onAuthStateChange(async (evt, sess) => {
-        if (evt === 'SIGNED_IN' && sess?.access_token) {
-          const act = await attemptReconcile()
-          cleanupHash()
-          window.location.replace(act ? '/app?welcome=1' : '/app')
-        }
-      })
-      // Safety timeout in case event doesn’t arrive
-      setTimeout(() => {
-        sub.subscription?.unsubscribe?.()
-      }, 10000)
+
+      const activated = await attemptReconcile()
+      cleanupParams()
+      window.location.replace(activated ? '/app?welcome=1' : '/app')
     })
   }, [])
   return null
@@ -86,7 +84,7 @@ export function BootstrapAuthLink() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-  <BootstrapAuthLink />
+      <BootstrapAuthLink />
       <App />
     </BrowserRouter>
   </StrictMode>,

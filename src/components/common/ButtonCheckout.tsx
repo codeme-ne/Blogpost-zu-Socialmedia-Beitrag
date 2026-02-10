@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Loader2, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
-import { getSupabaseClient } from '@/api/supabase'
+import { createJWT } from '@/api/appwrite'
 
 interface ButtonCheckoutProps {
   priceId: string
@@ -12,8 +12,6 @@ interface ButtonCheckoutProps {
   children?: React.ReactNode
   variant?: 'default' | 'outline' | 'secondary'
 }
-
-const supabase = getSupabaseClient()
 
 // ShipFast-inspired checkout button
 // Automatically handles authentication state and creates Stripe checkout sessions
@@ -38,9 +36,9 @@ export function ButtonCheckout({
 
       // Add auth token if user is logged in
       if (userEmail) {
-        const { data } = await supabase.auth.getSession()
-        if (data.session?.access_token) {
-          headers.Authorization = `Bearer ${data.session.access_token}`
+        const jwt = await createJWT()
+        if (jwt) {
+          headers.Authorization = `Bearer ${jwt}`
         }
       }
 
@@ -69,7 +67,7 @@ export function ButtonCheckout({
       window.location.href = data.url
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error))
-      console.error('Checkout error:', err)
+      if (import.meta.env.DEV) console.error('Checkout error:', err)
       toast.error(
         err.message === 'Checkout creation failed'
           ? 'Fehler beim Erstellen der Bezahlung. Bitte versuchen Sie es erneut.'

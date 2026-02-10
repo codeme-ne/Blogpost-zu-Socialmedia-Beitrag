@@ -242,7 +242,7 @@ export const useEnhancedContentGeneration = () => {
    */
   const exportGenerationData = () => {
     const data = Object.entries(enhancedPosts)
-      .filter(([_, state]) => state)
+      .filter(([, state]) => state)
       .map(([platform, state]) => ({
         platform,
         post: state!.post,

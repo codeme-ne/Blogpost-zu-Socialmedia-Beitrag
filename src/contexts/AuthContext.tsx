@@ -1,12 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { getSupabaseClient, getSession } from '@/api/supabase';
-import { Session, User } from '@supabase/supabase-js';
-
-const supabase = getSupabaseClient();
+import { onAuthStateChange, getCurrentUser, type AppwriteUser } from '@/api/appwrite';
 
 interface AuthContextType {
-  session: Session | null;
-  user: User | null;
+  session: { user: AppwriteUser } | null;
+  user: AppwriteUser | null;
   loading: boolean;
   refreshSession: () => Promise<void>;
 }
@@ -14,18 +11,15 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppwriteUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refreshSession = async () => {
     try {
-      const { data: { session: newSession } } = await getSession();
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
     } catch (error) {
-      console.error('Error refreshing session:', error);
-      setSession(null);
+      if (import.meta.env.DEV) console.error('Error refreshing session:', error);
       setUser(null);
     }
   };
@@ -34,11 +28,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Initial session load
     const loadSession = async () => {
       try {
-        const { data: { session: initialSession } } = await getSession();
-        setSession(initialSession);
-        setUser(initialSession?.user ?? null);
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
       } catch (error) {
-        console.error('Error loading initial session:', error);
+        if (import.meta.env.DEV) console.error('Error loading initial session:', error);
       } finally {
         setLoading(false);
       }
@@ -47,15 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadSession();
 
     // Subscribe to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-
-        // Handle specific events
+    const { data: { subscription } } = onAuthStateChange(
+      async (event, sessionData) => {
         if (event === 'SIGNED_OUT') {
-          setSession(null);
           setUser(null);
+        } else if (sessionData?.user) {
+          setUser(sessionData.user);
         }
       }
     );
@@ -64,6 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  const session = user ? { user } : null;
 
   const value = {
     session,
@@ -91,5 +83,5 @@ export function useAuthRequired() {
     throw new Error('Authentication required');
   }
 
-  return auth as AuthContextType & { user: User };
+  return auth as AuthContextType & { user: AppwriteUser };
 }

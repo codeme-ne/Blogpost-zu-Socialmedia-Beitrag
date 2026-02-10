@@ -7,7 +7,7 @@ import {
   X,
   Sparkles,
   Zap,
-  Infinity,
+  Infinity as InfinityIcon,
   Shield,
   TrendingUp,
   Users,
@@ -43,7 +43,7 @@ export function PremiumComparison({
     {
       name: 'Posts pro Tag',
       free: '3 Posts',
-      pro: <span className="flex items-center gap-1"><Infinity className="h-4 w-4" /> Unbegrenzt</span>,
+      pro: <span className="flex items-center gap-1"><InfinityIcon className="h-4 w-4" /> Unbegrenzt</span>,
       icon: <Sparkles className="h-4 w-4" />,
       highlight: true,
     },

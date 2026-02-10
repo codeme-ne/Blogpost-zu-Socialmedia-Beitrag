@@ -49,6 +49,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/auth/verify" element={<PageLoader />} />
           <Route path="*" element={<Landing />} />
         </Routes>
       </Suspense>

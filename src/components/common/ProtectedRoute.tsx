@@ -1,6 +1,6 @@
 import { useEffect, useState, ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
-import { getSession, onAuthStateChange } from '@/api/supabase'
+import { getCurrentUser, onAuthStateChange } from '@/api/appwrite'
 
 interface Props {
   children: ReactNode
@@ -10,9 +10,9 @@ export default function ProtectedRoute({ children }: Props) {
   const [isAuthed, setIsAuthed] = useState<boolean | null>(null)
 
   useEffect(() => {
-    getSession().then(({ data }) => setIsAuthed(!!data.session))
-    const { data: sub } = onAuthStateChange((_event, session) => setIsAuthed(!!session))
-    return () => sub?.subscription?.unsubscribe?.()
+    getCurrentUser().then((user) => setIsAuthed(!!user))
+    const result = onAuthStateChange((_event, session) => setIsAuthed(!!session))
+    return () => result.data.subscription.unsubscribe()
   }, [])
 
   if (isAuthed === null) return null

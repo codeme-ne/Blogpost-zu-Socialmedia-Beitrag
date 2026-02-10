@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
 import { Button } from "@/components/ui/button";
 import { useSubscription } from "@/hooks/useSubscription";
-import { getSession, signOut } from "@/api/supabase";
+import { getSession, signOut } from "@/api/appwrite";
 import { toast } from "sonner";
 import { 
   CreditCard, 
@@ -33,11 +33,11 @@ export function AccountButton({ className }: AccountButtonProps) {
     if (!email) {
       try {
         const { data } = await getSession();
-        if (data.session?.user.email) {
+        if (data?.session?.user?.email) {
           setEmail(data.session.user.email);
         }
       } catch (error) {
-        console.error("Failed to load user data:", error);
+        if (import.meta.env.DEV) console.error("Failed to load user data:", error);
       }
     }
   };
@@ -54,7 +54,7 @@ export function AccountButton({ className }: AccountButtonProps) {
       toast.success("Erfolgreich abgemeldet");
       navigate("/");
     } catch (error) {
-      console.error("Logout error:", error);
+      if (import.meta.env.DEV) console.error("Logout error:", error);
       toast.error("Fehler beim Abmelden");
     } finally {
       setIsLogoutLoading(false);
@@ -72,7 +72,7 @@ export function AccountButton({ className }: AccountButtonProps) {
     try {
       await openCustomerPortal();
     } catch (error) {
-      console.error("Portal error:", error);
+      if (import.meta.env.DEV) console.error("Portal error:", error);
       // Error is already handled by the hook
     } finally {
       setIsPortalLoading(false);

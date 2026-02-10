@@ -1,18 +1,28 @@
 import { buildSinglePostPrompt, buildBatchedPostPrompt, parseBatchedResponse } from '@/libs/promptBuilder';
-import { generateClaudeMessage } from '@/libs/api-client';
+import { generateOpenRouterMessage } from '@/libs/api-client';
+import type { OpenRouterMessageResponse } from '@/libs/api-client';
 import type { Platform } from '@/config/platforms';
+import { OPENROUTER_MODEL } from '@/config/ai';
+
+function extractText(response: OpenRouterMessageResponse): string {
+  const block = response.content?.[0];
+  if (!block || typeof block !== 'object' || !('text' in block) || typeof block.text !== 'string') {
+    throw new Error('Invalid AI response: expected text block');
+  }
+  return block.text;
+}
 
 export async function linkedInPostsFromNewsletter(content: string) {
   try {
    const prompt = buildSinglePostPrompt(content, 'linkedin');
-   const response = await generateClaudeMessage({
-     model: 'claude-3-5-sonnet-20241022',
+   const response = await generateOpenRouterMessage({
+     model: OPENROUTER_MODEL,
      max_tokens: 4096,
      temperature: 0.85,
      messages: [{ role: 'user', content: prompt }],
    });
 
-   const text = response.content[0].text;
+   const text = extractText(response);
    // Parse single LinkedIn post
    const regex = /LINKEDIN:\s*([\s\S]*?)$/;
    const match = text.match(regex);
@@ -82,14 +92,14 @@ export async function xTweetsFromBlog(content: string) {
   try {
     const prompt = buildSinglePostPrompt(content, 'x');
 
-    const response = await generateClaudeMessage({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await generateOpenRouterMessage({
+      model: OPENROUTER_MODEL,
       max_tokens: 280,
       temperature: 0.65,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = response.content[0].text.trim();
+    const text = extractText(response).trim();
 
     // Parse single tweet - take the first non-empty line
     const cleanedTweet = sanitizeTweet(text);
@@ -105,14 +115,14 @@ export async function instagramPostsFromBlog(content: string) {
   try {
     const prompt = buildSinglePostPrompt(content, 'instagram');
 
-    const response = await generateClaudeMessage({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await generateOpenRouterMessage({
+      model: OPENROUTER_MODEL,
       max_tokens: 4096,
       temperature: 0.85,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = response.content[0].text;
+    const text = extractText(response);
 
     // Parse single Instagram post from XML tags
     const descriptionsMatch = text.match(/<instagram_descriptions>([\s\S]*?)<\/instagram_descriptions>/i);
@@ -161,21 +171,21 @@ export async function batchedPostsFromContent(
   try {
     const prompt = buildBatchedPostPrompt(content, platforms);
 
-    const response = await generateClaudeMessage({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await generateOpenRouterMessage({
+      model: OPENROUTER_MODEL,
       max_tokens: 4096,
       temperature: 0.85,
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = response.content[0].text;
+    const text = extractText(response);
 
     // Parse batched response
     const parsed = parseBatchedResponse(text, platforms);
 
     return parsed; // Returns null if parsing failed, triggering fallback
   } catch (error) {
-    console.error('Batched generation failed:', error);
+    if (import.meta.env.DEV) console.error('Batched generation failed:', error);
     return null; // Signal fallback to parallel calls
   }
 }

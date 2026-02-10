@@ -55,9 +55,13 @@ export function useFeatureFlag(
     }
 
     // Check localStorage override (for testing)
-    const localOverride = localStorage.getItem(`feature_${envVarName}`);
-    if (localOverride !== null) {
-      return localOverride === 'true';
+    try {
+      const localOverride = localStorage.getItem(`feature_${envVarName}`);
+      if (localOverride !== null) {
+        return localOverride === 'true';
+      }
+    } catch {
+      // localStorage unavailable (Safari private mode)
     }
 
     // Check rollout percentage if specified
@@ -101,7 +105,12 @@ export function useActiveFeatureFlags(): string[] {
 
     Object.entries(FEATURE_FLAGS).forEach(([key, envVar]) => {
       const value = import.meta.env[envVar];
-      const localOverride = localStorage.getItem(`feature_${envVar}`);
+      let localOverride: string | null = null;
+      try {
+        localOverride = localStorage.getItem(`feature_${envVar}`);
+      } catch {
+        // localStorage unavailable
+      }
 
       if (value === 'true' || value === true || localOverride === 'true') {
         flags.push(key);
@@ -130,9 +139,13 @@ export function useABTest<T extends string>(
 
   const [variant] = useState<T>(() => {
     // Check for override in localStorage
-    const override = localStorage.getItem(`ab_test_${testName}`);
-    if (override && variants.includes(override as T)) {
-      return override as T;
+    try {
+      const override = localStorage.getItem(`ab_test_${testName}`);
+      if (override && variants.includes(override as T)) {
+        return override as T;
+      }
+    } catch {
+      // localStorage unavailable
     }
 
     // Check URL parameter override
@@ -193,15 +206,18 @@ function getUserHash(): number {
  * Get or generate user ID for consistent feature flag assignment
  */
 function getUserId(): string {
-  const storedId = localStorage.getItem('feature_flag_user_id');
-
-  if (storedId) {
-    return storedId;
+  try {
+    const storedId = localStorage.getItem('feature_flag_user_id');
+    if (storedId) {
+      return storedId;
+    }
+    const newId = generateUserId();
+    localStorage.setItem('feature_flag_user_id', newId);
+    return newId;
+  } catch {
+    // localStorage unavailable (Safari private mode) - return ephemeral ID
+    return generateUserId();
   }
-
-  const newId = generateUserId();
-  localStorage.setItem('feature_flag_user_id', newId);
-  return newId;
 }
 
 /**
@@ -215,18 +231,13 @@ function generateUserId(): string {
  * Get current user group (can be extended based on your user system)
  */
 function getCurrentUserGroup(): string {
-  // This could be based on user data, subscription status, etc.
-  // For now, return a default group
-  const userEmail = localStorage.getItem('user_email');
-
-  if (userEmail?.includes('@admin')) {
-    return 'admin';
+  try {
+    const userEmail = localStorage.getItem('user_email');
+    if (userEmail?.includes('@admin')) return 'admin';
+    if (userEmail?.includes('@beta')) return 'beta';
+  } catch {
+    // localStorage unavailable
   }
-
-  if (userEmail?.includes('@beta')) {
-    return 'beta';
-  }
-
   return 'default';
 }
 
@@ -235,8 +246,9 @@ function getCurrentUserGroup(): string {
  */
 function trackFeatureFlagUsage(event: FeatureFlagEvent): void {
   // Send to your analytics service
-  if (typeof window !== 'undefined' && (window as any).analytics) {
-    (window as any).analytics.track('Feature Flag Used', event);
+  const win = window as unknown as Record<string, unknown>;
+  if (typeof window !== 'undefined' && win.analytics) {
+    (win.analytics as { track: (name: string, data: unknown) => void }).track('Feature Flag Used', event);
   }
 
   // Log to console in development
@@ -250,8 +262,9 @@ function trackFeatureFlagUsage(event: FeatureFlagEvent): void {
  */
 function trackABTestAssignment(testName: string, variant: string): void {
   // Send to your analytics service
-  if (typeof window !== 'undefined' && (window as any).analytics) {
-    (window as any).analytics.track('A/B Test Assignment', {
+  const win = window as unknown as Record<string, unknown>;
+  if (typeof window !== 'undefined' && win.analytics) {
+    (win.analytics as { track: (name: string, data: unknown) => void }).track('A/B Test Assignment', {
       test: testName,
       variant,
       timestamp: Date.now(),

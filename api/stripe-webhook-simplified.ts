@@ -1,14 +1,10 @@
 import Stripe from 'stripe'
-import { createClient } from '@supabase/supabase-js'
+import { getServerDatabases, getUserIdByEmail, createUser, DB_ID, Query } from './utils/appwrite.js'
+import { ID } from 'node-appwrite'
 
 // Fix TypeScript definition issues - some fields exist in API but not in types
-declare module 'stripe' {
-  namespace Stripe {
-    interface Invoice {
-      subscription?: string | Stripe.Subscription | null;
-    }
-  }
-}
+// eslint-disable-next-line @typescript-eslint/no-namespace
+declare module 'stripe' { namespace Stripe { interface Invoice { subscription?: string | Stripe.Subscription | null } } }
 
 // Type for subscription item with period fields (API version 2025-08-27.basil)
 interface SubscriptionItemWithPeriod extends Stripe.SubscriptionItem {
@@ -20,29 +16,41 @@ export const config = {
   runtime: 'edge',
 }
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-})
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) throw new Error(`Missing required env var: ${name}`)
+  return value
+}
 
-// Initialize Supabase with service role key (bypasses RLS)
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Initialize Stripe (lazy to allow clear error on missing env)
+let _stripe: Stripe | null = null
+function getStripe(): Stripe {
+  if (!_stripe) {
+    _stripe = new Stripe(requireEnv('STRIPE_SECRET_KEY'), {
+      apiVersion: '2025-08-27.basil',
+    })
+  }
+  return _stripe
+}
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+let _webhookSecret: string | null = null
+function getWebhookSecret(): string {
+  if (!_webhookSecret) _webhookSecret = requireEnv('STRIPE_WEBHOOK_SECRET')
+  return _webhookSecret
+}
 
-// ShipFast-inspired simplified webhook handler
-// No reconciliation complexity - direct processing
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
   }
 
-  // Check if Stripe is configured
-  if (!stripe || !webhookSecret) {
-    console.error('Stripe not configured properly')
+  let stripe: Stripe
+  let webhookSecret: string
+  try {
+    stripe = getStripe()
+    webhookSecret = getWebhookSecret()
+  } catch (e) {
+    console.error('Stripe not configured properly:', e)
     return new Response('Stripe configuration missing', { status: 500 })
   }
 
@@ -57,47 +65,37 @@ export default async function handler(req: Request) {
   let event: Stripe.Event
 
   try {
-    // Verify webhook signature with 5-minute timestamp tolerance (300 seconds)
-    // This prevents replay attacks by rejecting events older than 5 minutes
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret, 300)
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err))
     console.error(`Webhook signature verification failed: ${error.message}`)
-    return new Response(`Webhook signature verification failed: ${error.message}`, { status: 400 })
+    return new Response('Webhook signature verification failed', { status: 400 })
   }
 
-  // Idempotency protection - insert FIRST to prevent race conditions
-  // Prevents processing the same event multiple times if Stripe retries
-  // NOTE: Requires Supabase migration:
-  // CREATE TABLE processed_webhooks (
-  //   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  //   event_id TEXT UNIQUE NOT NULL,
-  //   event_type TEXT NOT NULL,
-  //   processed_at TIMESTAMPTZ DEFAULT NOW()
-  // );
-  // CREATE INDEX idx_processed_webhooks_event_id ON processed_webhooks(event_id);
+  const databases = getServerDatabases()
+
+  // Idempotency protection
   try {
-    const { error: insertError } = await supabase
-      .from('processed_webhooks')
-      .insert({
+    await databases.createDocument(
+      DB_ID,
+      'processed_webhooks',
+      event.id,
+      {
         event_id: event.id,
         event_type: event.type,
         processed_at: new Date().toISOString()
-      })
-
-    if (insertError) {
-      // Check if it's a duplicate key error (Postgres 23505)
-      if (insertError.code === '23505') {
-        console.log(`Duplicate webhook event ${event.id}, skipping`)
-        return new Response(JSON.stringify({ received: true, duplicate: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        })
       }
-      // Other insert errors - log but continue (best effort)
-      console.error('Failed to record webhook:', insertError)
+    )
+  } catch (e: unknown) {
+    // Check for duplicate (Appwrite unique index violation)
+    const appwriteError = e as { code?: number; type?: string }
+    if (appwriteError?.code === 409 || appwriteError?.type === 'document_already_exists') {
+      console.log(`Duplicate webhook event ${event.id}, skipping`)
+      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
     }
-  } catch (e) {
     console.error('Webhook recording error:', e)
   }
 
@@ -106,12 +104,11 @@ export default async function handler(req: Request) {
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
-        // Payment successful - grant access (ShipFast pattern)
         const session = event.data.object as Stripe.Checkout.Session
 
         const customerId = session.customer as string
         const priceId = session.line_items?.data?.[0]?.price?.id
-        const clientReferenceId = session.client_reference_id // User ID
+        const clientReferenceId = session.client_reference_id
         const amount = session.amount_total
         const currency = session.currency
 
@@ -120,32 +117,22 @@ export default async function handler(req: Request) {
           break
         }
 
-        // Get customer details
         const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer
-        
-        let userId = clientReferenceId
-        
-        // If no user ID, find/create user by email (ShipFast pattern)
-        if (!userId && customer.email) {
-          // Try to find existing user using RPC function (O(1) query instead of O(n))
-          const { data: existingUserId, error: rpcError } = await supabase
-            .rpc('get_user_id_by_email', { user_email: customer.email })
 
-          if (!rpcError && existingUserId) {
+        let userId = clientReferenceId
+
+        if (!userId && customer.email) {
+          const existingUserId = await getUserIdByEmail(customer.email)
+
+          if (existingUserId) {
             userId = existingUserId
           } else {
-            // Create new user
-            const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-              email: customer.email,
-              email_confirm: true,
-            })
-
-            if (createError) {
-              console.error('Failed to create user:', createError)
+            const newUser = await createUser(customer.email)
+            if (!newUser) {
+              console.error('Failed to create user')
               break
             }
-
-            userId = newUser.user?.id
+            userId = newUser.id
           }
         }
 
@@ -154,17 +141,14 @@ export default async function handler(req: Request) {
           break
         }
 
-        // Determine subscription interval based on price ID
-        // Map known price IDs to intervals - both monthly and yearly use subscription mode
-        let interval = 'monthly' // default fallback
-
+        // Determine subscription interval
+        let interval = 'monthly'
         const monthlyPriceId = process.env.STRIPE_MONTHLY_PRICE_ID;
         const yearlyPriceId = process.env.STRIPE_YEARLY_PRICE_ID;
 
-        // Define correct prices (in cents) for validation
         const CORRECT_PRICES = {
-          monthly: 2900, // 29 EUR
-          yearly: 29900, // 299 EUR
+          monthly: 2900,
+          yearly: 29900,
         };
 
         switch (priceId) {
@@ -175,23 +159,13 @@ export default async function handler(req: Request) {
             interval = 'yearly';
             break;
           default: {
-            // SECURITY: Unknown price ID - should never happen in production
-            console.error('🚨 SECURITY ALERT: Unknown price ID received!');
-            console.error(`   Event ID: ${event.id}`);
-            console.error(`   Session ID: ${session.id}`);
-            console.error(`   Unknown Price ID: ${priceId}`);
-            console.error(`   Expected: ${monthlyPriceId} (monthly) or ${yearlyPriceId} (yearly)`);
-            console.error(`   Fallback: Using session mode as interval`);
+            console.error('Unknown price ID received:', priceId)
 
-            // Log anomaly for review
-            const { error: unknownPriceError } = await supabase
-              .from('webhook_anomalies')
-              .insert({
+            try {
+              await databases.createDocument(DB_ID, 'webhook_anomalies', ID.unique(), {
                 event_id: event.id,
                 anomaly_type: 'unknown_price_id',
-                expected_value: null,
-                received_value: null,
-                details: {
+                details: JSON.stringify({
                   received_price_id: priceId,
                   expected_monthly: monthlyPriceId,
                   expected_yearly: yearlyPriceId,
@@ -199,95 +173,73 @@ export default async function handler(req: Request) {
                   session_mode: session.mode,
                   amount: amount,
                   timestamp: new Date().toISOString(),
-                },
-              });
-
-            if (unknownPriceError) {
-              console.error('Failed to log unknown price ID anomaly:', unknownPriceError);
+                }),
+              })
+            } catch (logErr) {
+              console.error('Failed to log unknown price ID anomaly:', logErr)
             }
 
-            // Fallback for safety, but should not be hit with correct config
             interval = session.mode === 'subscription' ? 'monthly' : 'yearly';
             break;
           }
         }
 
-        // Validate and use config price for data integrity
         const expectedAmount = CORRECT_PRICES[interval as keyof typeof CORRECT_PRICES];
         if (amount !== expectedAmount) {
-          // SECURITY: Price mismatch detected - log prominently
-          console.error('🚨 SECURITY ALERT: Price mismatch detected in Stripe checkout!');
-          console.error(`   Event ID: ${event.id}`);
-          console.error(`   Session ID: ${session.id}`);
-          console.error(`   Price ID: ${priceId}`);
-          console.error(`   Interval: ${interval}`);
-          console.error(`   Received: ${amount} cents (${amount / 100} EUR)`);
-          console.error(`   Expected: ${expectedAmount} cents (${expectedAmount / 100} EUR)`);
-          console.error(`   Difference: ${amount - expectedAmount} cents`);
-          console.error(`   Action: Using validated config price (${expectedAmount}) for database`);
+          console.error('Price mismatch detected:', { expected: expectedAmount, received: amount })
 
-          // Record anomaly for monitoring and review
-          // NOTE: Requires migration 20251126_create_webhook_anomalies.sql
-          const { error: priceMismatchError } = await supabase
-            .from('webhook_anomalies')
-            .insert({
+          try {
+            await databases.createDocument(DB_ID, 'webhook_anomalies', ID.unique(), {
               event_id: event.id,
               anomaly_type: 'price_mismatch',
               expected_value: expectedAmount,
               received_value: amount,
-              details: {
+              details: JSON.stringify({
                 interval,
                 session_id: session.id,
                 price_id: priceId,
                 customer_id: customerId,
                 difference_cents: amount - expectedAmount,
                 timestamp: new Date().toISOString(),
-              },
-            });
-
-          if (priceMismatchError) {
-            // Log insertion failure but don't break webhook processing
-            console.error('Failed to log price mismatch anomaly:', priceMismatchError);
+              }),
+            })
+          } catch (logErr) {
+            console.error('Failed to log price mismatch anomaly:', logErr)
           }
         }
-        const validatedAmount = expectedAmount; // Always use config price
-        
-        // Create or update subscription record (simplified)
+        const validatedAmount = expectedAmount;
+
+        // Check if subscription already exists for this user
+        const existingSubs = await databases.listDocuments(DB_ID, 'subscriptions', [
+          Query.equal('user_id', userId),
+          Query.limit(1),
+        ])
+
         const subscriptionData = {
           user_id: userId,
           stripe_customer_id: customerId,
-          stripe_payment_intent_id: session.payment_intent as string || null,
-          stripe_subscription_id: session.subscription as string || null,
+          stripe_payment_intent_id: session.payment_intent as string || '',
+          stripe_subscription_id: session.subscription as string || '',
           status: 'active',
-          is_active: true, // ShipFast-style hasAccess equivalent
-          amount: validatedAmount, // Use validated amount from config
+          is_active: true,
+          amount: validatedAmount,
           currency: currency || 'eur',
           interval,
           stripe_price_id: priceId,
           current_period_start: new Date().toISOString(),
-          // Set period end based on interval
           current_period_end: interval === 'yearly'
-            ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year
-            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days for monthly
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+            ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         }
 
-        // Upsert subscription
-        const { error: upsertError } = await supabase
-          .from('subscriptions')
-          .upsert(subscriptionData, {
-            onConflict: 'user_id',
-          })
-
-        if (upsertError) {
-          console.error('Failed to upsert subscription:', upsertError)
-          break
+        if (existingSubs.documents.length > 0) {
+          await databases.updateDocument(DB_ID, 'subscriptions', existingSubs.documents[0].$id, subscriptionData)
+        } else {
+          await databases.createDocument(DB_ID, 'subscriptions', ID.unique(), subscriptionData)
         }
 
-        console.log(`✅ Subscription activated for user ${userId}`)
-        
-        // Optional: Send welcome email (similar to your existing logic)
+        console.log(`Subscription activated for user ${userId}`)
+
         await sendWelcomeEmail(customer.email || '', {
           amount: amount / 100,
           currency: currency || 'eur',
@@ -298,75 +250,69 @@ export default async function handler(req: Request) {
       }
 
       case 'customer.subscription.updated': {
-        // Subscription updated - handle plan changes
         const subscription = event.data.object as Stripe.Subscription
 
-        // In API version 2025-08-27.basil, current_period_start/end moved to subscription items
         const firstItem = subscription.items?.data?.[0] as SubscriptionItemWithPeriod | undefined
         const periodStart = firstItem?.current_period_start || Math.floor(Date.now() / 1000)
         const periodEnd = firstItem?.current_period_end || Math.floor((Date.now() + 30 * 24 * 60 * 60 * 1000) / 1000)
-        
-        const { error } = await supabase
-          .from('subscriptions')
-          .update({
+
+        // Find subscription by stripe_subscription_id
+        const subs = await databases.listDocuments(DB_ID, 'subscriptions', [
+          Query.equal('stripe_subscription_id', subscription.id),
+          Query.limit(1),
+        ])
+
+        if (subs.documents.length > 0) {
+          await databases.updateDocument(DB_ID, 'subscriptions', subs.documents[0].$id, {
             status: subscription.status,
             is_active: subscription.status === 'active',
             current_period_start: new Date(periodStart * 1000).toISOString(),
             current_period_end: new Date(periodEnd * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
           })
-          .eq('stripe_subscription_id', subscription.id)
-
-        if (error) {
-          console.error('Failed to update subscription:', error)
+          console.log(`Subscription updated: ${subscription.id}`)
         } else {
-          console.log(`✅ Subscription updated: ${subscription.id}`)
+          console.error('Subscription not found for update:', subscription.id)
         }
 
         break
       }
 
       case 'customer.subscription.deleted': {
-        // Subscription canceled - revoke access (ShipFast pattern)
         const subscription = event.data.object as Stripe.Subscription
 
-        const { error } = await supabase
-          .from('subscriptions')
-          .update({
-            status: 'canceled',
-            is_active: false, // Revoke access
-            updated_at: new Date().toISOString(),
-          })
-          .eq('stripe_subscription_id', subscription.id)
+        const subs = await databases.listDocuments(DB_ID, 'subscriptions', [
+          Query.equal('stripe_subscription_id', subscription.id),
+          Query.limit(1),
+        ])
 
-        if (error) {
-          console.error('Failed to cancel subscription:', error)
+        if (subs.documents.length > 0) {
+          await databases.updateDocument(DB_ID, 'subscriptions', subs.documents[0].$id, {
+            status: 'canceled',
+            is_active: false,
+          })
+          console.log(`Subscription canceled: ${subscription.id}`)
         } else {
-          console.log(`❌ Subscription canceled: ${subscription.id}`)
+          console.error('Subscription not found for cancellation:', subscription.id)
         }
 
         break
       }
 
       case 'invoice.paid': {
-        // Recurring payment successful - ensure access is granted
         const invoice = event.data.object as Stripe.Invoice
-        
-        // invoice.subscription is always a string ID (per TypeScript definition)
+
         if (invoice.subscription) {
-          const { error } = await supabase
-            .from('subscriptions')
-            .update({
+          const subs = await databases.listDocuments(DB_ID, 'subscriptions', [
+            Query.equal('stripe_subscription_id', invoice.subscription as string),
+            Query.limit(1),
+          ])
+
+          if (subs.documents.length > 0) {
+            await databases.updateDocument(DB_ID, 'subscriptions', subs.documents[0].$id, {
               status: 'active',
               is_active: true,
-              updated_at: new Date().toISOString(),
             })
-            .eq('stripe_subscription_id', invoice.subscription)
-
-          if (error) {
-            console.error('Failed to reactivate subscription:', error)
-          } else {
-            console.log(`✅ Recurring payment processed for subscription: ${invoice.subscription}`)
+            console.log(`Recurring payment processed for subscription: ${invoice.subscription}`)
           }
         }
 
@@ -374,14 +320,10 @@ export default async function handler(req: Request) {
       }
 
       case 'invoice.payment_failed': {
-        // Payment failed - could revoke access or wait for retry
         const invoice = event.data.object as Stripe.Invoice
-        
-        // invoice.subscription is always a string ID (per TypeScript definition)
+
         if (invoice.subscription) {
-          // For now, just log - Stripe will retry automatically
-          console.log(`⚠️  Payment failed for subscription: ${invoice.subscription}`)
-          // You could implement grace period logic here
+          console.log(`Payment failed for subscription: ${invoice.subscription}`)
         }
 
         break
@@ -393,7 +335,7 @@ export default async function handler(req: Request) {
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
     console.error(`Webhook processing error for ${event.type}:`, err)
-    return new Response(`Webhook error: ${err.message}`, { status: 500 })
+    return new Response('Webhook processing error', { status: 500 })
   }
 
   return new Response(JSON.stringify({ received: true }), {
@@ -402,34 +344,56 @@ export default async function handler(req: Request) {
   })
 }
 
-// Optional welcome email function
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 async function sendWelcomeEmail(email: string, details: {
   amount: number
   currency: string
   interval: string
 }) {
   const apiKey = process.env.RESEND_API_KEY
+  const rawSiteUrl = (process.env.VITE_SITE_URL || process.env.VITE_BASE_URL || 'https://linkedin-posts-one.vercel.app').replace(/\/$/, '')
   if (!apiKey || !email) return
 
-  const subject = details.interval === 'yearly'
-    ? 'Willkommen bei Social Transformer - Ihr Jahres-Abo ist aktiv! 🎉'
-    : 'Willkommen bei Social Transformer - Ihr Pro-Abo ist aktiv! 🎉'
+  // Validate siteUrl is a proper URL to prevent injection
+  try {
+    const parsed = new URL(rawSiteUrl)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return
+  } catch {
+    return
+  }
 
-  const euros = details.amount.toFixed(2)
+  const siteUrl = escapeHtml(rawSiteUrl)
+  const isYearly = details.interval === 'yearly'
+
+  const subject = isYearly
+    ? 'Willkommen bei Social Transformer - Ihr Jahres-Abo ist aktiv!'
+    : 'Willkommen bei Social Transformer - Ihr Pro-Abo ist aktiv!'
+
+  const euros = escapeHtml(details.amount.toFixed(2))
+  const planLabel = isYearly ? 'Yearly Pro' : 'Monthly Pro'
+  const aboLabel = isYearly ? 'Jahres-Abo' : 'Pro-Abo'
   const html = `
     <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height:1.6; color:#0f172a;">
-      <h2 style="margin:0 0 16px; color:#1f2937;">Willkommen bei Social Transformer! 🎉</h2>
-      <p>Vielen Dank für Ihren Kauf. Ihr ${details.interval === 'yearly' ? 'Jahres-Abo' : 'Pro-Abo'} ist jetzt aktiv!</p>
-      
+      <h2 style="margin:0 0 16px; color:#1f2937;">Willkommen bei Social Transformer!</h2>
+      <p>Vielen Dank fuer Ihren Kauf. Ihr ${aboLabel} ist jetzt aktiv!</p>
+
       <div style="background:#f8fafc; padding:16px; border-radius:8px; margin:16px 0;">
         <h3 style="margin:0 0 8px; color:#374151;">Ihre Bestellung:</h3>
-        <p style="margin:4px 0;"><strong>Plan:</strong> ${details.interval === 'yearly' ? 'Yearly Pro' : 'Monthly Pro'}</p>
-        <p style="margin:4px 0;"><strong>Betrag:</strong> €${euros}</p>
+        <p style="margin:4px 0;"><strong>Plan:</strong> ${planLabel}</p>
+        <p style="margin:4px 0;"><strong>Betrag:</strong> EUR ${euros}</p>
       </div>
 
       <p><strong>Jetzt loslegen:</strong><br>
-      <a href="https://transformer.social/app" style="color:#2563eb; text-decoration:none;">→ Social Transformer App öffnen</a></p>
-      
+      <a href="${siteUrl}/app" style="color:#2563eb; text-decoration:none;">Social Transformer App oeffnen</a></p>
+
       <p>Sie haben jetzt Zugang zu allen Premium-Features:</p>
       <ul>
         <li>Unbegrenzte Content-Generierung</li>

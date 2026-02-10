@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { linkedInPostsFromNewsletter, xTweetsFromBlog, instagramPostsFromBlog, batchedPostsFromContent } from '@/api/claude'
 import type { Platform } from '@/config/platforms'
 import { PLATFORM_LABEL } from '@/config/platforms'
 import { buildSinglePostPrompt, validatePost, normalizeSinglePostResponse } from '@/libs/promptBuilder'
 import { useSubscription } from '@/hooks/useSubscription'
-import { generateClaudeMessage } from '@/libs/api-client'
+import { generateOpenRouterMessage } from '@/libs/api-client'
 import type { VoiceTone } from '@/config/voice-tones'
 import { DEFAULT_VOICE_TONE } from '@/config/voice-tones'
+import { OPENROUTER_MODEL } from '@/config/ai'
 
 interface GenerationProgress {
   progress: number // 0-100
@@ -19,6 +20,14 @@ interface GenerationProgress {
 // Maximum number of posts to keep in memory (LRU-like cache)
 const MAX_POSTS = 50
 
+const toError = (error: unknown): Error => {
+  if (error instanceof Error) return error
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return new Error(error.message)
+  }
+  return new Error(String(error))
+}
+
 export const useContentGeneration = () => {
   const [postsByPlatform, setPostsByPlatform] = useState<Record<Platform, string[]>>({
     linkedin: [],
@@ -27,6 +36,9 @@ export const useContentGeneration = () => {
   })
   // Single-post state (new)
   const [generatedPosts, setGeneratedPosts] = useState<Partial<Record<Platform, { post: string; regenerationCount: number; isEdited: boolean }>>>({})
+  // Ref to always read latest generatedPosts inside callbacks (avoids stale closure)
+  const generatedPostsRef = useRef(generatedPosts)
+  generatedPostsRef.current = generatedPosts
   const [activeGenerations, setActiveGenerations] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress>({
@@ -104,7 +116,7 @@ export const useContentGeneration = () => {
       toast.success(`Beiträge erstellt! Generiert für: ${names}`)
 
       return true
-    } catch (error) {
+    } catch {
       toast.error("Fehler beim Erstellen - LinkedIn-Beiträge konnten nicht erstellt werden.")
       return false
     } finally {
@@ -199,7 +211,7 @@ export const useContentGeneration = () => {
       throw new Error('Usage limit reached')
     }
 
-    const current = generatedPosts[platform]
+    const current = generatedPostsRef.current[platform]
     const regenerationCount = current?.regenerationCount || 0
     const generationId = `${platform}-${Date.now()}`
     setActiveGenerations((prev) => new Set([...prev, generationId]))
@@ -218,8 +230,8 @@ export const useContentGeneration = () => {
         ? Math.min(0.95, 0.8 + regenerationCount * 0.05)
         : 0.7
 
-      const response = await generateClaudeMessage({
-        model: 'claude-3-5-sonnet-20241022',
+      const response = await generateOpenRouterMessage({
+        model: OPENROUTER_MODEL,
         max_tokens: maxTokens,
         temperature,
         messages: [
@@ -230,7 +242,7 @@ export const useContentGeneration = () => {
       // Type guard: validate response structure before accessing text
       const firstBlock = response.content?.[0]
       if (!firstBlock || typeof firstBlock !== 'object' || !('text' in firstBlock) || typeof firstBlock.text !== 'string') {
-        throw new Error('Invalid Claude API response: expected text block')
+        throw new Error('Invalid AI response: expected text block')
       }
       const raw = firstBlock.text
       const generatedPost = normalizeSinglePostResponse(raw, platform)
@@ -263,7 +275,7 @@ export const useContentGeneration = () => {
 
       return generatedPost
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error))
+      const err = toError(error)
       let errorMessage = 'Generierung fehlgeschlagen. Bitte erneut versuchen.'
       const msg = err.message
       if (msg.includes('Usage limit') || msg.includes('limit')) {
@@ -272,6 +284,14 @@ export const useContentGeneration = () => {
         errorMessage = 'Zu viele Anfragen. Bitte 30 Sekunden warten.'
       } else if (err.name === 'AbortError') {
         errorMessage = 'Anfrage-Timeout. Bitte versuche es erneut.'
+      } else if (
+        msg.includes('OPENROUTER_API_KEY') ||
+        msg.includes('OpenRouter ist nicht konfiguriert') ||
+        msg.includes('AI service is not properly configured')
+      ) {
+        errorMessage = 'OpenRouter ist nicht eingerichtet. Bitte OPENROUTER_API_KEY in `.env.local` setzen.'
+      } else if (msg.includes('OpenRouter API-Route nicht gefunden')) {
+        errorMessage = 'Lokale API nicht erreichbar. Starte `npm run dev:full`.'
       }
       toast.error(errorMessage)
       throw err
@@ -282,10 +302,10 @@ export const useContentGeneration = () => {
         return next
       })
     }
-  }, [hasUsageRemaining, decrementUsage, generatedPosts, setShowUpgradeModal, setActiveGenerations, setGeneratedPosts])
+  }, [hasUsageRemaining, decrementUsage, setShowUpgradeModal, setActiveGenerations, setGeneratedPosts])
 
   const regeneratePost = async (content: string, platform: Platform, voiceTone?: VoiceTone) => {
-    const current = generatedPosts[platform]
+    const current = generatedPostsRef.current[platform]
     if (current?.isEdited) {
       const proceed = window.confirm('Das Regenerieren überschreibt Ihre Änderungen. Fortfahren?')
       if (!proceed) return null

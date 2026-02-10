@@ -43,6 +43,11 @@ pnpm-debug.log*
 # Screenshots
 screenshots/
 
+# Playwright CLI artifacts (snapshots, logs, downloads)
+.playwright-cli/
+playwright-report/
+test-results/
+
 # Tools
 .serena
 .claude
@@ -51,3 +56,7 @@ screenshots/
 supabase/.branches
 supabase/.temp
 .vercel
+.env*.local
+
+# Local backups
+.env.local.bak*

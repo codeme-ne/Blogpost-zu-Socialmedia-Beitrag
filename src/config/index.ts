@@ -24,16 +24,17 @@ export {
   isDevelopment,
   isProduction,
   getStripePaymentLinks,
-  getSupabaseConfig,
+  getAppwriteConfig,
   getLinkedInConfig,
+  getOpenRouterConfig,
   getClaudeConfig,
   getAppUrls,
   initializeEnvironment
-} from './env.config';
+} from '../lib/env-validation';
 export type {
   EnvironmentVariables,
   EnvironmentValidationResult
-} from './env.config';
+} from '../lib/env-validation';
 
 // Platform configuration
 export type { Platform } from './platforms';

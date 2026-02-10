@@ -1,3 +1,5 @@
+import { createJWT } from './appwrite';
+
 export type ExtractResult = {
   title?: string;
   byline?: string | null;
@@ -14,9 +16,16 @@ function apiBase() {
 }
 
 export async function extractFromUrl(url: string): Promise<ExtractResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  const jwt = await createJWT();
+  if (jwt) {
+    headers['Authorization'] = `Bearer ${jwt}`;
+  }
+
   const res = await fetch(`${apiBase()}/api/extract`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ url }),
   });
   if (!res.ok) {

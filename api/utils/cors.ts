@@ -87,7 +87,7 @@ export function isOriginAllowed(origin: string | null): boolean {
  * @returns Response with CORS headers
  */
 export function createCorsResponse(
-  body: any,
+  body: unknown,
   options: {
     status?: number;
     origin?: string | null;

@@ -1,5 +1,5 @@
 import { useEffect, useState, memo } from 'react'
-import { SavedPost, getSavedPosts, deleteSavedPost, updateSavedPost } from '@/api/supabase'
+import { SavedPost, getSavedPosts, deleteSavedPost, updateSavedPost } from '@/api/appwrite'
 import { SaveButton, EditButton, DeleteButton, LinkedInShareButton, XShareButton, InstagramShareButton } from '@/design-system/components/ActionButtons'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -28,10 +28,10 @@ interface SavedPostsProps {
 
 interface PostCardProps {
   post: SavedPost;
-  editingPost: { id: number; content: string } | null;
-  onEdit: (id: number, content: string) => void;
-  onDelete: (id: number) => void;
-  onStartEdit: (id: number, content: string) => void;
+  editingPost: { id: string; content: string } | null;
+  onEdit: (id: string, content: string) => void;
+  onDelete: (id: string) => void;
+  onStartEdit: (id: string, content: string) => void;
   onCancelEdit: () => void;
   onEditContentChange: (content: string) => void;
 }
@@ -138,11 +138,12 @@ const PostCard = memo(({ post, editingPost, onEdit, onDelete, onStartEdit, onCan
     </div>
   )
 })
+PostCard.displayName = 'PostCard'
 
 const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuthenticated, onLoginClick, initialExpanded, inline }: SavedPostsProps) {
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([])
   const [isCollapsed, setIsCollapsed] = useState(!initialExpanded)
-  const [editingPost, setEditingPost] = useState<{ id: number, content: string } | null>(null)
+  const [editingPost, setEditingPost] = useState<{ id: string, content: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -169,31 +170,31 @@ const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuth
       const posts = await getSavedPosts()
       setSavedPosts(posts)
     } catch (error) {
-      console.error('Failed to load saved posts:', error)
+      if (import.meta.env.DEV) console.error('Failed to load saved posts:', error)
       toast.error('Gespeicherte Beiträge konnten nicht geladen werden.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
       await deleteSavedPost(id)
       setSavedPosts(posts => posts.filter(p => p.id !== id))
-    } catch (error) {
-      // Error will be handled by UI - show unchanged state
+    } catch {
+      toast.error('Beitrag konnte nicht gelöscht werden.')
     }
   }
 
-  const handleEdit = async (id: number, newContent: string) => {
+  const handleEdit = async (id: string, newContent: string) => {
     try {
       await updateSavedPost(id, newContent)
       setSavedPosts(posts => posts.map(p =>
         p.id === id ? { ...p, content: newContent } : p
       ))
       setEditingPost(null)
-    } catch (error) {
-      // Error handling - editing state remains active
+    } catch {
+      toast.error('Beitrag konnte nicht aktualisiert werden.')
     }
   }
 

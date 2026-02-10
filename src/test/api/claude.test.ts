@@ -19,7 +19,7 @@ describe('Claude API Integration', () => {
         usage: { input_tokens: 100, output_tokens: 50 }
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => mockResponse
@@ -46,7 +46,7 @@ describe('Claude API Integration', () => {
         retryAfter: 30
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
         status: 429,
         json: async () => mockErrorResponse,
@@ -74,7 +74,7 @@ describe('Claude API Integration', () => {
         details: 'Messages array is required'
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => mockErrorResponse
@@ -97,7 +97,7 @@ describe('Claude API Integration', () => {
         code: 'INTERNAL_ERROR'
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
         status: 500,
         json: async () => mockErrorResponse
@@ -117,7 +117,7 @@ describe('Claude API Integration', () => {
     });
 
     test('should handle network errors', async () => {
-      (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+      vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'));
 
       await expect(
         fetch('/api/claude/v1/messages', {
@@ -135,7 +135,7 @@ describe('Claude API Integration', () => {
       const timeoutError = new Error('Request timeout');
       timeoutError.name = 'AbortError';
       
-      (global.fetch as any).mockRejectedValueOnce(timeoutError);
+      vi.mocked(global.fetch).mockRejectedValueOnce(timeoutError);
 
       await expect(
         fetch('/api/claude/v1/messages', {
@@ -157,7 +157,7 @@ describe('Claude API Integration', () => {
         code: 'METHOD_NOT_ALLOWED'
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
         status: 405,
         json: async () => mockErrorResponse
@@ -178,7 +178,7 @@ describe('Claude API Integration', () => {
         code: 'INVALID_JSON'
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => mockErrorResponse
@@ -201,7 +201,7 @@ describe('Claude API Integration', () => {
         code: 'INVALID_REQUEST'
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => mockErrorResponse
@@ -221,7 +221,7 @@ describe('Claude API Integration', () => {
 
   describe('CORS Handling', () => {
     test('should handle preflight OPTIONS request', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         status: 200,
         headers: new Headers({

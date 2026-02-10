@@ -1,5 +1,5 @@
 // Stripe utility functions for Social Transformer
-// Based on Ship Fast best practices, adapted for Supabase
+// Based on Ship Fast best practices, adapted for Appwrite
 
 export interface CreateCustomerPortalParams {
   customerId: string;
@@ -73,7 +73,7 @@ export async function createCustomerPortal(params: CreateCustomerPortalParams): 
 
     return portalSession.url;
   } catch (error) {
-    console.error('Error creating customer portal:', error);
+    if (import.meta.env.DEV) console.error('Error creating customer portal:', error);
     throw new Error(
       error instanceof Error 
         ? `Portal creation failed: ${error.message}` 
@@ -97,7 +97,7 @@ export async function createCheckoutSession(params: CreateCheckoutSessionParams)
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-    const extraParams: Record<string, any> = {};
+    const extraParams: Record<string, unknown> = {};
 
     // Handle existing customer or create new one
     if (params.user?.customerId) {
@@ -143,7 +143,7 @@ export async function createCheckoutSession(params: CreateCheckoutSessionParams)
 
     return session.url;
   } catch (error) {
-    console.error('Error creating checkout session:', error);
+    if (import.meta.env.DEV) console.error('Error creating checkout session:', error);
     throw new Error(
       error instanceof Error 
         ? `Checkout creation failed: ${error.message}` 
@@ -173,7 +173,7 @@ export async function findCheckoutSession(sessionId: string): Promise<StripeSess
 
     return session as StripeSession;
   } catch (error) {
-    console.error('Error finding checkout session:', error);
+    if (import.meta.env.DEV) console.error('Error finding checkout session:', error);
     return null;
   }
 }

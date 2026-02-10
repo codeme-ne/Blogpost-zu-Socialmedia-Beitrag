@@ -4,7 +4,8 @@ import {
   type PostGenerationOptions,
   type PostGenerationResponse
 } from '@/libs/promptBuilder.v2';
-import { generateClaudeMessage } from '@/libs/api-client';
+import { generateOpenRouterMessage } from '@/libs/api-client';
+import { OPENROUTER_MODEL } from '@/config/ai';
 
 /**
  * Core generation logic shared by all platform-specific functions
@@ -13,8 +14,8 @@ import { generateClaudeMessage } from '@/libs/api-client';
 async function _generate(options: PostGenerationOptions, max_tokens: number): Promise<PostGenerationResponse> {
   const prompt = buildStructuredPostPrompt(options);
 
-  const response = await generateClaudeMessage({
-    model: 'claude-3-5-sonnet-20241022',
+  const response = await generateOpenRouterMessage({
+    model: OPENROUTER_MODEL,
     max_tokens,
     temperature: options.regenerationSeed ? Math.min(1.0, 0.8 + (options.regenerationSeed * 0.05)) : 0.7,
     messages: [
@@ -22,8 +23,11 @@ async function _generate(options: PostGenerationOptions, max_tokens: number): Pr
     ]
   }, { timeout: 25000 });
 
-  const rawText = (response.content[0] as { text: string }).text;
-  return parseStructuredResponse(rawText);
+  const firstBlock = response.content?.[0];
+  if (!firstBlock || typeof firstBlock !== 'object' || !('text' in firstBlock) || typeof firstBlock.text !== 'string') {
+    throw new Error('Invalid AI response: expected text block');
+  }
+  return parseStructuredResponse(firstBlock.text);
 }
 
 /**
@@ -34,7 +38,7 @@ export async function generateEnhancedLinkedInPost(options: PostGenerationOption
   try {
     return await _generate(options, 2048);
   } catch (error) {
-    console.error('Enhanced LinkedIn generation failed:', error);
+    if (import.meta.env.DEV) console.error('Enhanced LinkedIn generation failed:', error);
     throw new Error('Failed to generate enhanced LinkedIn post');
   }
 }
@@ -46,7 +50,7 @@ export async function generateEnhancedTwitterPost(options: PostGenerationOptions
   try {
     return await _generate(options, 1024);
   } catch (error) {
-    console.error('Enhanced Twitter generation failed:', error);
+    if (import.meta.env.DEV) console.error('Enhanced Twitter generation failed:', error);
     throw new Error('Failed to generate enhanced Twitter post');
   }
 }
@@ -58,7 +62,7 @@ export async function generateEnhancedInstagramPost(options: PostGenerationOptio
   try {
     return await _generate(options, 2048);
   } catch (error) {
-    console.error('Enhanced Instagram generation failed:', error);
+    if (import.meta.env.DEV) console.error('Enhanced Instagram generation failed:', error);
     throw new Error('Failed to generate enhanced Instagram post');
   }
 }
@@ -131,7 +135,7 @@ export async function generateComparison(
     };
 
   } catch (error) {
-    console.error('Comparison generation failed:', error);
+    if (import.meta.env.DEV) console.error('Comparison generation failed:', error);
     throw new Error('Failed to generate comparison');
   }
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Auth } from "@/components/common/Auth";
-import { getSession, onAuthStateChange } from "@/api/supabase";
+import { getCurrentUser, onAuthStateChange } from "@/api/appwrite";
 import { HeaderBarSignUp } from "@/components/landing/HeaderBarSignUp";
 
 export default function SignUp() {
@@ -11,8 +11,8 @@ export default function SignUp() {
 
   useEffect(() => {
     // Auto-redirect if already logged in
-    getSession().then(({ data }) => {
-      if (data.session) navigate("/app", { replace: true });
+    getCurrentUser().then((user) => {
+      if (user) navigate("/app", { replace: true });
       else setChecking(false);
     });
   const { data: sub } = onAuthStateChange(async (_event, session) => {
@@ -61,7 +61,7 @@ export default function SignUp() {
 
         {/* Footer */}
         <footer className="py-6 text-center text-sm text-muted-foreground border-t border-slate-200 dark:border-slate-800 mt-12">
-          <p>© 2025 Social Transformer • Newsletter zu Social Media Posts</p>
+          <p>© 2026 Social Transformer • Newsletter zu Social Media Posts</p>
         </footer>
       </div>
     </div>

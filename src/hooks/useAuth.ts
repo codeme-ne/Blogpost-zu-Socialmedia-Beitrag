@@ -1,31 +1,19 @@
 import { useEffect, useState } from 'react'
-import { getSession, onAuthStateChange } from '@/api/supabase'
+import { useAuth as useAuthContext } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
 
 export const useAuth = () => {
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const { user } = useAuthContext()
   const [loginOpen, setLoginOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
 
+  const userEmail = user?.email ?? null
+
+  // Close login modal when user signs in
   useEffect(() => {
-    getSession().then(({ data }) => {
-      setUserEmail(data.session?.user.email ?? null)
-    })
-    const { data: sub } = onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user.email ?? null)
-      if (session) setLoginOpen(false)
-    })
-    return () => {
-      try {
-        if (sub?.subscription) {
-          sub.subscription.unsubscribe()
-        }
-      } catch (error) {
-        console.error('Failed to cleanup auth subscription:', error)
-      }
-    }
-  }, [])
+    if (user) setLoginOpen(false)
+  }, [user])
 
   // Show welcome toast once when redirected after signup confirmation
   useEffect(() => {
@@ -34,7 +22,7 @@ export const useAuth = () => {
       const KEY = 'st_welcome_toast_shown'
       const alreadyShown = typeof window !== 'undefined' && window.localStorage.getItem(KEY) === '1'
       if (!alreadyShown) {
-        toast.success('Willkommen! 🎉 - Dein Account ist aktiviert. Viel Spaß beim Remixen!')
+        toast.success('Willkommen! - Dein Account ist aktiviert. Viel Spass beim Remixen!')
         try {
           window.localStorage.setItem(KEY, '1')
         } catch {

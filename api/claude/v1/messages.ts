@@ -1,13 +1,42 @@
-import { getCorsHeaders, createCorsResponse, handlePreflight } from '../../utils/cors.js';
+import { createCorsResponse, handlePreflight } from '../../utils/cors.js';
 import { parseJsonSafely } from '../../utils/safeJson.js';
+import { verifyJWT, getServerDatabases, DB_ID, Query } from '../../utils/appwrite.js';
+import { checkRateLimit, getClientIp } from '../../utils/rateLimit.js';
 
 export const config = {
   runtime: 'edge',
   regions: ['fra1'], // Frankfurt für niedrige Latenz in Europa
 };
 
+const DEFAULT_OPENROUTER_MODEL = (process.env.OPENROUTER_MODEL || 'openrouter/auto').trim() || 'openrouter/auto'
+const FREE_GENERATIONS_PER_DAY = 3
+
+function normalizeOpenRouterApiKey(rawKey: string | undefined): string | null {
+  if (!rawKey) return null
+
+  // Some env providers store secrets with escaped newlines.
+  // OpenRouter keys must be single-line.
+  const normalized = rawKey
+    .replace(/\\n/g, '')
+    .replace(/\r?\n/g, '')
+    .trim()
+
+  return normalized.length > 0 ? normalized : null
+}
+
 // Map Anthropic model names to OpenRouter model names
 function mapModelToOpenRouter(model: string): string {
+  const normalizedModel = model.trim()
+
+  if (!normalizedModel) {
+    return DEFAULT_OPENROUTER_MODEL
+  }
+
+  // Native OpenRouter model IDs are already in provider/model form.
+  if (normalizedModel.includes('/')) {
+    return normalizedModel
+  }
+
   const modelMap: Record<string, string> = {
     'claude-3-5-sonnet-20241022': 'anthropic/claude-sonnet-4',
     'claude-3-5-sonnet-latest': 'anthropic/claude-sonnet-4',
@@ -17,13 +46,14 @@ function mapModelToOpenRouter(model: string): string {
     'claude-sonnet-4-20250514': 'anthropic/claude-sonnet-4',
     'claude-opus-4-20250514': 'anthropic/claude-opus-4',
   };
-  return modelMap[model] || `anthropic/${model}`;
+
+  return modelMap[normalizedModel] || `anthropic/${normalizedModel}`;
 }
 
 // Transform Anthropic-style request to OpenRouter format
 function transformRequestToOpenRouter(body: Record<string, unknown>): Record<string, unknown> {
   const openRouterBody: Record<string, unknown> = {
-    model: mapModelToOpenRouter(body.model as string || 'claude-3-5-sonnet-20241022'),
+    model: mapModelToOpenRouter((body.model as string | undefined) || DEFAULT_OPENROUTER_MODEL),
     messages: body.messages,
   };
 
@@ -60,9 +90,7 @@ function transformResponseToAnthropic(openRouterResponse: Record<string, unknown
 }
 
 export default async function handler(req: Request) {
-  // Get CORS headers
   const origin = req.headers.get('origin');
-  const headers = getCorsHeaders(origin);
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -79,6 +107,60 @@ export default async function handler(req: Request) {
   }
 
   try {
+    // Verify JWT authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return createCorsResponse({
+        error: 'Authentication required',
+        code: 'AUTH_REQUIRED'
+      }, { status: 401, origin });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const user = await verifyJWT(token);
+    if (!user) {
+      return createCorsResponse({
+        error: 'Invalid or expired token',
+        code: 'AUTH_INVALID'
+      }, { status: 401, origin });
+    }
+
+    // Rate limiting: 20 requests per minute per IP
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(`chat:${ip}`, { maxRequests: 20, windowMs: 60_000 });
+    if (rl.limited) {
+      return createCorsResponse({
+        error: 'Too many requests. Please try again later.',
+        code: 'RATE_LIMITED',
+        retryAfter: rl.retryAfterSeconds
+      }, { status: 429, origin, headers: { 'Retry-After': String(rl.retryAfterSeconds) } });
+    }
+
+    // Server-side free tier enforcement: check subscription and daily usage
+    const databases = getServerDatabases();
+    const subs = await databases.listDocuments(DB_ID, 'subscriptions', [
+      Query.equal('user_id', user.id),
+      Query.equal('is_active', true),
+      Query.limit(1),
+    ]);
+    const isPremium = subs.documents.length > 0;
+
+    if (!isPremium) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const usage = await databases.listDocuments(DB_ID, 'generation_usage', [
+        Query.equal('user_id', user.id),
+        Query.greaterThanEqual('generated_at', todayStart.toISOString()),
+        Query.limit(FREE_GENERATIONS_PER_DAY + 1),
+      ]);
+      if (usage.documents.length >= FREE_GENERATIONS_PER_DAY) {
+        return createCorsResponse({
+          error: 'Tageslimit erreicht. Upgrade auf Pro fuer unbegrenzte Generierungen.',
+          code: 'FREE_TIER_LIMIT_REACHED'
+        }, { status: 429, origin });
+      }
+    }
+
     // Validate and parse request body with size limit (100KB for AI prompts)
     const parseResult = await parseJsonSafely<{ messages?: unknown[]; [key: string]: unknown }>(req, 100 * 1024);
     if (!parseResult.success) {
@@ -106,14 +188,14 @@ export default async function handler(req: Request) {
     }
 
     // OpenRouter API Key from environment variable
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = normalizeOpenRouterApiKey(process.env.OPENROUTER_API_KEY);
 
     if (!apiKey) {
       console.error('OPENROUTER_API_KEY is not configured');
       return createCorsResponse({
-        error: 'Service temporarily unavailable',
+        error: 'OpenRouter is not configured',
         code: 'CONFIGURATION_ERROR',
-        message: 'AI service is not properly configured'
+        message: 'Set OPENROUTER_API_KEY in your environment variables'
       }, { status: 503, origin });
     }
 
@@ -198,12 +280,21 @@ export default async function handler(req: Request) {
       // Transform OpenRouter response to Anthropic format for client compatibility
       const anthropicFormatData = transformResponseToAnthropic(openRouterData);
 
+      // Record usage for free-tier tracking (fire-and-forget)
+      if (!isPremium) {
+        const { ID } = await import('node-appwrite');
+        databases.createDocument(DB_ID, 'generation_usage', ID.unique(), {
+          user_id: user.id,
+          generated_at: new Date().toISOString(),
+        }).catch(() => { /* non-critical */ });
+      }
+
       return createCorsResponse(anthropicFormatData, { status: 200, origin });
 
     } catch (fetchError) {
       clearTimeout(timeoutId);
 
-      if (fetchError.name === 'AbortError') {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         return createCorsResponse({
           error: 'Request timeout. Please try again.',
           code: 'TIMEOUT',
@@ -212,7 +303,7 @@ export default async function handler(req: Request) {
       }
 
       // Network errors
-      if (fetchError.message.includes('fetch')) {
+      if (fetchError instanceof Error && fetchError.message.includes('fetch')) {
         console.error('Network error calling OpenRouter API:', fetchError);
         return createCorsResponse({
           error: 'Network error connecting to AI service',
@@ -224,7 +315,7 @@ export default async function handler(req: Request) {
     }
 
   } catch (error) {
-    console.error('Error in claude edge function:', error);
+    console.error('Error in OpenRouter edge function:', error);
 
     // Don't expose internal error details in production
     const isDevelopment = process.env.NODE_ENV === 'development';
@@ -233,7 +324,9 @@ export default async function handler(req: Request) {
       error: 'Internal server error',
       code: 'INTERNAL_ERROR',
       message: 'An unexpected error occurred',
-      ...(isDevelopment && { details: error.message })
+      ...(isDevelopment && {
+        details: error instanceof Error ? error.message : String(error)
+      })
     }, { status: 500, origin });
   }
 }

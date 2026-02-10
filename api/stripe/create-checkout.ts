@@ -1,29 +1,53 @@
 import Stripe from 'stripe'
-import { createClient } from '@supabase/supabase-js'
+import { verifyJWT } from '../utils/appwrite.js'
 import { parseJsonSafely } from '../utils/safeJson.js'
+import { createCorsResponse, handlePreflight } from '../utils/cors.js'
+
+// Allowed origins for successUrl/cancelUrl to prevent open redirect
+const ALLOWED_ORIGINS = [
+  'https://linkedin-posts-one.vercel.app',
+  'https://transformer.social',
+  'http://localhost:5173',
+  'http://localhost:3001',
+];
+
+function isAllowedRedirectUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ALLOWED_ORIGINS.some(origin => parsed.origin === origin);
+  } catch {
+    return false;
+  }
+}
 
 export const config = {
   runtime: 'edge',
 }
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-})
+let _stripe: Stripe | null = null
+function getStripe(): Stripe {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY
+    if (!key) throw new Error('Missing required env var: STRIPE_SECRET_KEY')
+    _stripe = new Stripe(key, { apiVersion: '2025-08-27.basil' })
+  }
+  return _stripe
+}
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
-)
-
-// ShipFast-inspired simple checkout creation
-// Handles both one-time payments and subscriptions
 export default async function handler(req: Request) {
+  const origin = req.headers.get('origin')
+
+  if (req.method === 'OPTIONS') {
+    return handlePreflight(origin)
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return createCorsResponse({ error: 'Method not allowed' }, { status: 405, origin })
   }
 
   try {
-    // Parse with size limit (10KB is plenty for checkout requests)
+    const stripe = getStripe()
+
     const parseResult = await parseJsonSafely<{
       priceId?: string;
       mode?: 'payment' | 'subscription';
@@ -32,58 +56,46 @@ export default async function handler(req: Request) {
     }>(req, 10 * 1024);
 
     if (!parseResult.success) {
-      return new Response(
-        JSON.stringify({ error: parseResult.error }),
-        { status: parseResult.error.includes('too large') ? 413 : 400, headers: { 'Content-Type': 'application/json' } }
+      return createCorsResponse(
+        { error: parseResult.error },
+        { status: parseResult.error.includes('too large') ? 413 : 400, origin }
       );
     }
 
     const { priceId, mode = 'payment', successUrl, cancelUrl } = parseResult.data
 
     if (!priceId) {
-      return new Response(JSON.stringify({ error: 'Price ID is required' }), { 
-        status: 400, 
-        headers: { 'Content-Type': 'application/json' } 
-      })
+      return createCorsResponse({ error: 'Price ID is required' }, { status: 400, origin })
     }
 
     if (!successUrl || !cancelUrl) {
-      return new Response(
-        JSON.stringify({ error: 'Success and cancel URLs are required' }),
-        { 
-          status: 400,
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      )
+      return createCorsResponse({ error: 'Success and cancel URLs are required' }, { status: 400, origin })
+    }
+
+    // Validate redirect URLs against allowed origins to prevent open redirect
+    if (!isAllowedRedirectUrl(successUrl) || !isAllowedRedirectUrl(cancelUrl)) {
+      return createCorsResponse({ error: 'Invalid redirect URL' }, { status: 400, origin })
     }
 
     if (!['payment', 'subscription'].includes(mode)) {
-      return new Response(
-        JSON.stringify({ error: 'Mode must be either "payment" or "subscription"' }),
-        { 
-          status: 400,
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      )
+      return createCorsResponse({ error: 'Mode must be either "payment" or "subscription"' }, { status: 400, origin })
     }
 
-    // Get user from Authorization header if present
-    let user = null
-    let clientReferenceId = null
-    
+    // Get user from Authorization header (Appwrite JWT)
+    let user: { id: string; email: string } | null = null
+    let clientReferenceId: string | null = null
+
     const authHeader = req.headers.get('authorization')
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1]
       try {
-        const { data: userData } = await supabase.auth.getUser(token)
-        user = userData.user
-        clientReferenceId = user?.id
+        user = await verifyJWT(token)
+        clientReferenceId = user?.id || null
       } catch {
         // Continue without user if token is invalid
       }
     }
 
-    // Create checkout session parameters
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode,
       allow_promotion_codes: true,
@@ -97,14 +109,11 @@ export default async function handler(req: Request) {
       cancel_url: cancelUrl,
     }
 
-    // Add client reference ID if we have a user
     if (clientReferenceId) {
       sessionParams.client_reference_id = clientReferenceId
     }
 
-    // Configure customer handling based on auth state
     if (user?.email) {
-      // User is logged in - prefill their email and link to existing customer if available
       const existingCustomer = await stripe.customers.list({
         email: user.email,
         limit: 1,
@@ -117,34 +126,26 @@ export default async function handler(req: Request) {
         sessionParams.customer_creation = 'always'
       }
     } else {
-      // User is not logged in - collect email and create customer
       sessionParams.customer_creation = 'always'
       sessionParams.tax_id_collection = { enabled: true }
     }
 
-    // For one-time payments, set up future usage for cards
     if (mode === 'payment') {
-      sessionParams.payment_intent_data = { 
-        setup_future_usage: 'on_session' 
+      sessionParams.payment_intent_data = {
+        setup_future_usage: 'on_session'
       }
     }
 
-    // Create the checkout session
     const session = await stripe.checkout.sessions.create(sessionParams)
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    })
+    return createCorsResponse({ url: session.url }, { status: 200, origin })
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
     console.error('Stripe checkout creation error:', err)
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
+    const isDevelopment = process.env.NODE_ENV === 'development'
+    return createCorsResponse(
+      { error: 'Failed to create checkout session.', ...(isDevelopment && { details: err.message }) },
+      { status: 500, origin }
     )
   }
 }

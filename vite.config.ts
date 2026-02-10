@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const apiDevTarget = process.env.VITE_API_DEV_TARGET || 'http://localhost:3010'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -20,7 +22,7 @@ export default defineConfig({
           // Separate vendor chunks
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-tabs', '@radix-ui/react-progress', '@radix-ui/react-label', '@radix-ui/react-slot', '@radix-ui/react-alert-dialog'],
-          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-appwrite': ['appwrite'],
           'vendor-utils': ['lucide-react', 'sonner', 'class-variance-authority', 'clsx', 'tailwind-merge']
         },
         // Add hashing for long-term caching
@@ -37,7 +39,7 @@ export default defineConfig({
       'react',
       'react-dom',
       'react-router-dom',
-      '@supabase/supabase-js',
+      'appwrite',
       'sonner'
     ],
   },
@@ -49,19 +51,20 @@ export default defineConfig({
     proxy: {
       // Proxy alle API-Routes zu Vercel Functions
       '^/api/.*': {
-        target: 'http://localhost:3001',
+        target: apiDevTarget,
         changeOrigin: true,
         secure: false,
-        configure: (proxy: any) => {
+        configure: (proxy: { on: (event: string, handler: (...args: unknown[]) => void) => void }) => {
           // Fallback falls Vercel nicht läuft - bessere Error Messages
-          proxy.on('error', (_err: any, _req: any, res: any) => {
-            console.log('\n🚨 API Proxy Error: Vercel dev server nicht erreichbar auf Port 3001')
-            console.log('💡 Tipp: Starte "vercel dev --port 3001" in einem separaten Terminal')
-            if ('writeHead' in res) {
-              res.writeHead(503, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ 
+          proxy.on('error', (_err: unknown, _req: unknown, res: unknown) => {
+            console.log(`\n🚨 API Proxy Error: Vercel dev server nicht erreichbar auf ${apiDevTarget}`)
+            console.log('💡 Tipp: Starte "npm run dev:api" in einem separaten Terminal')
+            const response = res as { writeHead?: (status: number, headers: Record<string, string>) => void; end?: (body: string) => void }
+            if (response.writeHead) {
+              response.writeHead(503, { 'Content-Type': 'application/json' })
+              response.end?.(JSON.stringify({
                 error: 'API temporarily unavailable - Vercel dev server not running',
-                hint: 'Run "vercel dev --port 3001" in a separate terminal'
+                hint: `Run "npm run dev:api" (target: ${apiDevTarget}) in a separate terminal`
               }))
             }
           })

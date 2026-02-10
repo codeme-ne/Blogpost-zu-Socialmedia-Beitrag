@@ -1,294 +1,110 @@
 import { useState } from 'react'
-import { signInWithEmail, signUpWithPassword, signInWithPassword, resetPasswordForEmail } from '@/api/supabase'
+import { signInWithEmail } from '@/api/appwrite'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
-import { getSupabaseClient } from '@/api/supabase'
-
-const supabase = getSupabaseClient()
-
-type AuthMode = 'login' | 'register' | 'magic-link'
+import { Mail, CheckCircle2, RefreshCw } from 'lucide-react'
 
 export function Auth() {
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
-  const [authMode, setAuthMode] = useState<AuthMode>('login')
+  const [emailSent, setEmailSent] = useState(false)
+  const [sentToEmail, setSentToEmail] = useState('')
 
-  // Safely reconcile pending subscription on the server (service role)
-  // Instead of writing from the client (RLS-safe and avoids duplication)
-  const checkPendingSubscription = async (_userEmail: string, _userId: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-
-      const resp = await fetch('/api/reconcile-subscription', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      const json = await resp.json().catch(() => ({})) as { activated?: number }
-      if (json?.activated) {
-        toast.success('🎉 Ihr Pro-Abo wurde aktiviert! - Sie haben jetzt Zugang zu allen Pro-Features.')
-      }
-    } catch (err) {
-      // Silent failure for subscription reconciliation
-    }
-  }
-
-  const handlePasswordAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email || !password) return
-
-    // Bei Registrierung Passwörter prüfen
-    if (authMode === 'register') {
-      if (password.length < 6) {
-        toast.error('Passwort zu kurz - Das Passwort muss mindestens 6 Zeichen lang sein.')
-        return
-      }
-      if (password !== passwordConfirm) {
-        toast.error('Passwörter stimmen nicht überein - Bitte stelle sicher, dass beide Passwörter identisch sind.')
-        return
-      }
-    }
-
-    setLoading(true)
-    try {
-      if (authMode === 'register') {
-        const { error, data } = await signUpWithPassword(email, password)
-        if (error) {
-          // Spezielle Behandlung für verschiedene Fehlertypen
-          if (error.message?.includes('User already registered')) {
-            toast.error('E-Mail bereits registriert - Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich an oder verwende eine andere E-Mail.')
-          } else {
-            throw error
-          }
-        } else if (data?.user && !data.session) {
-          // User wurde erstellt, aber noch nicht bestätigt (email confirmation enabled)
-          toast.success('Registrierung erfolgreich! 📧 - Bitte prüfe deine E-Mail und klicke auf den Bestätigungslink, um deinen Account zu aktivieren.')
-          // Form zurücksetzen
-          setEmail('')
-          setPassword('')
-          setPasswordConfirm('')
-          setAuthMode('login')
-        } else if (data?.session) {
-          // User wurde erstellt und ist bereits eingeloggt (email confirmation disabled)
-          toast.success('Registrierung erfolgreich! - Du wirst automatisch weitergeleitet...')
-          
-          // Check for pending subscription
-          if (data.user) {
-            await checkPendingSubscription(email, data.user.id)
-          }
-        }
-      } else {
-        const { error, data } = await signInWithPassword(email, password)
-        if (error) {
-          // Spezielle Fehlerbehandlung für Login
-          if (error.message?.includes('Invalid login credentials')) {
-            toast.error('Anmeldung fehlgeschlagen - E-Mail oder Passwort ist falsch. Bitte überprüfe deine Eingaben.')
-          } else if (error.message?.includes('Email not confirmed')) {
-            toast.error('E-Mail nicht bestätigt - Bitte bestätige deine E-Mail-Adresse über den Link in der Bestätigungs-E-Mail.')
-          } else {
-            throw error
-          }
-        } else if (data?.session) {
-          toast.success('Erfolgreich angemeldet! - Du wirst weitergeleitet...')
-          
-          // Check for pending subscription on login too
-          if (data.user) {
-            await checkPendingSubscription(data.user.email || email, data.user.id)
-          }
-        }
-      }
-    } catch (err) {
-      toast.error(`${authMode === 'register' ? 'Registrierung fehlgeschlagen' : 'Login fehlgeschlagen'} - ${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleMagicLink = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return
-    
+
     setLoading(true)
     try {
       const { error } = await signInWithEmail(email)
       if (error) throw error
-      toast.success('Magic Link gesendet - Bitte prüfe deine E-Mail, um dich einzuloggen.')
+      setSentToEmail(email)
+      setEmailSent(true)
     } catch (err) {
-      toast.error(`Login fehlgeschlagen - ${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Link konnte nicht gesendet werden - ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setLoading(false)
     }
   }
 
+  const handleResend = async () => {
+    setLoading(true)
+    try {
+      const { error } = await signInWithEmail(sentToEmail)
+      if (error) throw error
+      toast.success('Neuer Link gesendet! - Bitte pruefe deine E-Mail.')
+    } catch (err) {
+      toast.error(`Fehler beim Senden - ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (emailSent) {
+    return (
+      <div className="space-y-6 text-center py-4">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-green-100 p-3">
+            <CheckCircle2 className="h-8 w-8 text-green-600" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Login-Link gesendet!</h3>
+          <p className="text-sm text-muted-foreground">
+            Wir haben dir einen Login-Link an <strong>{sentToEmail}</strong> geschickt.
+            Klicke auf den Link in der E-Mail, um dich anzumelden.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={loading}
+            onClick={handleResend}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Sende...' : 'Keinen Link erhalten? Erneut senden'}
+          </Button>
+          <button
+            type="button"
+            className="text-sm text-muted-foreground underline hover:text-foreground transition-colors"
+            onClick={() => {
+              setEmailSent(false)
+              setSentToEmail('')
+            }}
+          >
+            Andere E-Mail verwenden
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
-      {/* Auth Mode Tabs */}
-      <div className="grid grid-cols-3 gap-2 p-1 bg-muted rounded-lg">
-        <button
-          type="button"
-          onClick={() => setAuthMode('login')}
-          className={`px-3 py-2 text-sm font-medium rounded-md transition-all ${
-            authMode === 'login'
-              ? 'bg-background shadow-sm text-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Anmelden
-        </button>
-        <button
-          type="button"
-          onClick={() => setAuthMode('register')}
-          className={`px-3 py-2 text-sm font-medium rounded-md transition-all ${
-            authMode === 'register'
-              ? 'bg-background shadow-sm text-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Registrieren
-        </button>
-        <button
-          type="button"
-          onClick={() => setAuthMode('magic-link')}
-          className={`px-3 py-2 text-sm font-medium rounded-md transition-all ${
-            authMode === 'magic-link'
-              ? 'bg-background shadow-sm text-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Magic Link
-        </button>
-      </div>
-
-      {/* Auth Forms */}
-      {authMode === 'magic-link' ? (
-        <form onSubmit={handleMagicLink} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">E-Mail</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="email"
-                placeholder="deine@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="pl-10"
-                required
-              />
-            </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">E-Mail</label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="email"
+              placeholder="deine@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="pl-10"
+              required
+            />
           </div>
-          <Button type="submit" disabled={loading || !email} className="w-full">
-            {loading ? 'Sende Link...' : 'Magic Link senden'}
-          </Button>
-          <p className="text-xs text-center text-muted-foreground">
-            Du erhältst einen Login-Link per E-Mail
-          </p>
-        </form>
-      ) : (
-        <form onSubmit={handlePasswordAuth} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">E-Mail</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="email"
-                placeholder="deine@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="pl-10"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Passwort</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                placeholder={authMode === 'register' ? 'Mindestens 6 Zeichen' : 'Dein Passwort'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 pr-10"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          {authMode === 'register' && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Passwort bestätigen</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type={showPasswordConfirm ? 'text' : 'password'}
-                  placeholder="Passwort wiederholen"
-                  value={passwordConfirm}
-                  onChange={(e) => setPasswordConfirm(e.target.value)}
-                  className="pl-10 pr-10"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showPasswordConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <Button 
-            type="submit" 
-            disabled={loading || !email || !password || (authMode === 'register' && !passwordConfirm)} 
-            className="w-full"
-          >
-            {loading ? (
-              authMode === 'register' ? 'Registriere...' : 'Anmelden...'
-            ) : (
-              authMode === 'register' ? 'Jetzt registrieren' : 'Anmelden'
-            )}
-          </Button>
-
-          {authMode === 'login' && (
-            <p className="text-xs text-center text-muted-foreground">
-              <button 
-                type="button"
-                className="underline hover:text-foreground transition-colors"
-                onClick={async () => {
-                  if (!email) {
-                    toast.error('E-Mail erforderlich - Bitte gib deine E-Mail-Adresse ein, um dein Passwort zurückzusetzen.')
-                    return
-                  }
-                  try {
-                    const { error } = await resetPasswordForEmail(email)
-                    if (error) throw error
-                    toast.success('E-Mail gesendet! - Prüfe deine E-Mail für den Link zum Zurücksetzen des Passworts.')
-                  } catch (err) {
-                    toast.error(`Fehler - ${err instanceof Error ? err.message : 'Passwort-Reset fehlgeschlagen'}`)
-                  }
-                }}
-              >
-                Passwort vergessen?
-              </button>
-            </p>
-          )}
-        </form>
-      )}
+        </div>
+        <Button type="submit" disabled={loading || !email} className="w-full">
+          {loading ? 'Sende Link...' : 'Login-Link anfordern'}
+        </Button>
+        <p className="text-xs text-center text-muted-foreground">
+          Du erhaeltst einen Login-Link per E-Mail. Kein Passwort noetig.
+        </p>
+      </form>
     </div>
   )
 }
