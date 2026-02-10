@@ -6,9 +6,13 @@ export const config = {
   runtime: 'edge',
 }
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-})
+function getStripe(): Stripe {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) throw new Error('Missing required env var: STRIPE_SECRET_KEY')
+  return new Stripe(key, { apiVersion: '2025-08-27.basil' })
+}
+
+const stripe = getStripe()
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {

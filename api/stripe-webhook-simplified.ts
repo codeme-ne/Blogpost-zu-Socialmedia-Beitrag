@@ -21,20 +21,41 @@ export const config = {
   runtime: 'edge',
 }
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-})
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) throw new Error(`Missing required env var: ${name}`)
+  return value
+}
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+// Initialize Stripe (lazy to allow clear error on missing env)
+let _stripe: Stripe | null = null
+function getStripe(): Stripe {
+  if (!_stripe) {
+    _stripe = new Stripe(requireEnv('STRIPE_SECRET_KEY'), {
+      apiVersion: '2025-08-27.basil',
+    })
+  }
+  return _stripe
+}
+
+let _webhookSecret: string | null = null
+function getWebhookSecret(): string {
+  if (!_webhookSecret) _webhookSecret = requireEnv('STRIPE_WEBHOOK_SECRET')
+  return _webhookSecret
+}
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
   }
 
-  if (!stripe || !webhookSecret) {
-    console.error('Stripe not configured properly')
+  let stripe: Stripe
+  let webhookSecret: string
+  try {
+    stripe = getStripe()
+    webhookSecret = getWebhookSecret()
+  } catch (e) {
+    console.error('Stripe not configured properly:', e)
     return new Response('Stripe configuration missing', { status: 500 })
   }
 

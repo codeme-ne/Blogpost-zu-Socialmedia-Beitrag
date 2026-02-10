@@ -1,11 +1,36 @@
 import { Client, Account, Databases, ID, Query, Permission, Role, Models } from 'appwrite'
 
-const client = new Client()
-  .setEndpoint(import.meta.env.VITE_APPWRITE_ENDPOINT)
-  .setProject(import.meta.env.VITE_APPWRITE_PROJECT_ID)
+// Lazy-initialized singletons — created on first access, after env validation in main.tsx
+let _client: Client | null = null
+let _account: Account | null = null
+let _databases: Databases | null = null
 
-export const account = new Account(client)
-export const databases = new Databases(client)
+function getClient(): Client {
+  if (!_client) {
+    const endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT
+    const projectId = import.meta.env.VITE_APPWRITE_PROJECT_ID
+    if (!endpoint || !projectId) {
+      throw new Error('Appwrite not configured: VITE_APPWRITE_ENDPOINT and VITE_APPWRITE_PROJECT_ID required')
+    }
+    _client = new Client().setEndpoint(endpoint).setProject(projectId)
+  }
+  return _client
+}
+
+// Public accessors (lazy)
+export const account = new Proxy({} as Account, {
+  get: (_target, prop) => {
+    if (!_account) _account = new Account(getClient())
+    return (_account as any)[prop]
+  },
+})
+
+export const databases = new Proxy({} as Databases, {
+  get: (_target, prop) => {
+    if (!_databases) _databases = new Databases(getClient())
+    return (_databases as any)[prop]
+  },
+})
 
 const DB_ID = 'social_transformer'
 const COLLECTIONS = {
@@ -18,9 +43,11 @@ const COLLECTIONS = {
   webhook_anomalies: 'webhook_anomalies',
 } as const
 
-// Re-export client for direct access where needed
-export { client }
-export const getAppwriteClient = () => client
+export { getClient as getAppwriteClient }
+// Re-export client getter for Realtime subscriptions
+export const client = new Proxy({} as Client, {
+  get: (_target, prop) => (getClient() as any)[prop],
+})
 
 // --- Types ---
 
@@ -297,12 +324,19 @@ export const onAuthStateChange = (
       return
     }
 
-    // For other account events, check current state
+    // For other account events, check current state and issue fresh JWT
     try {
       const user = await account.get()
+      let accessToken = ''
+      try {
+        const jwt = await account.createJWT()
+        accessToken = jwt.jwt
+      } catch {
+        // JWT creation may fail — non-critical
+      }
       callback('TOKEN_REFRESHED', {
         user: mapUserToAppwriteUser(user),
-        access_token: '',
+        access_token: accessToken,
       })
     } catch {
       callback('SIGNED_OUT', null)

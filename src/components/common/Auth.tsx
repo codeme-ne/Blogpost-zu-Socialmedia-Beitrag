@@ -41,8 +41,8 @@ export function Auth() {
 
     // Bei Registrierung Passwoerter pruefen
     if (authMode === 'register') {
-      if (password.length < 6) {
-        toast.error('Passwort zu kurz - Das Passwort muss mindestens 6 Zeichen lang sein.')
+      if (password.length < 8) {
+        toast.error('Passwort zu kurz - Das Passwort muss mindestens 8 Zeichen lang sein.')
         return
       }
       if (password !== passwordConfirm) {
@@ -189,7 +189,7 @@ export function Auth() {
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type={showPassword ? 'text' : 'password'}
-                placeholder={authMode === 'register' ? 'Mindestens 6 Zeichen' : 'Dein Passwort'}
+                placeholder={authMode === 'register' ? 'Mindestens 8 Zeichen' : 'Dein Passwort'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="pl-10 pr-10"

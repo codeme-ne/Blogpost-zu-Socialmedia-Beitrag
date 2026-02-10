@@ -52,7 +52,9 @@ export default async function handler(req: Request) {
     }
 
     // Initialize Stripe
-    const stripe = new (await import('stripe')).default(process.env.STRIPE_SECRET_KEY!);
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) throw new Error('Missing required env var: STRIPE_SECRET_KEY');
+    const stripe = new (await import('stripe')).default(stripeKey);
 
     // Create Stripe Customer Portal session
     const portalSession = await stripe.billingPortal.sessions.create({

@@ -6,11 +6,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import config from '@/config/app.config';
 
 // Simple in-memory cache to prevent redundant queries (5 components = 1 query)
-const subscriptionCache: {
-  data: Subscription | null;
-  timestamp: number;
-  userId: string | null;
-} = { data: null, timestamp: 0, userId: null };
+// Immutable updates via updateCache() — never mutate directly.
+interface SubscriptionCacheEntry {
+  readonly data: Subscription | null;
+  readonly timestamp: number;
+  readonly userId: string | null;
+}
+
+let subscriptionCache: SubscriptionCacheEntry = { data: null, timestamp: 0, userId: null };
+
+function updateCache(patch: Partial<SubscriptionCacheEntry>): void {
+  subscriptionCache = { ...subscriptionCache, ...patch };
+}
 
 const CACHE_TTL = 60000; // 60 seconds
 
@@ -71,10 +78,8 @@ export function useSubscription() {
         throw fetchError;
       }
 
-      // Update cache with fresh data
-      subscriptionCache.data = data as Subscription | null;
-      subscriptionCache.timestamp = now;
-      subscriptionCache.userId = user.id;
+      // Update cache with fresh data (immutable)
+      updateCache({ data: data as Subscription | null, timestamp: now, userId: user.id });
       setSubscription(data as Subscription | null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Fehler beim Laden der Subscription';
@@ -86,8 +91,8 @@ export function useSubscription() {
   }, [user, authLoading]);
 
   const refreshSubscription = () => {
-    // Invalidate cache to force fresh fetch
-    subscriptionCache.timestamp = 0;
+    // Invalidate cache to force fresh fetch (immutable)
+    updateCache({ timestamp: 0 });
     fetchSubscription();
   };
 

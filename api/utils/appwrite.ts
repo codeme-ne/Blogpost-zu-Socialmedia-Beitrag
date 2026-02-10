@@ -2,12 +2,18 @@ import { Client, Databases, Users, Query } from 'node-appwrite'
 
 const DB_ID = 'social_transformer'
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) throw new Error(`Missing required env var: ${name}`)
+  return value
+}
+
 // Server-side Appwrite client with API key (bypasses permissions)
 function createServerClient() {
   const client = new Client()
-    .setEndpoint(process.env.APPWRITE_ENDPOINT!)
-    .setProject(process.env.APPWRITE_PROJECT_ID!)
-    .setKey(process.env.APPWRITE_API_KEY!)
+    .setEndpoint(requireEnv('APPWRITE_ENDPOINT'))
+    .setProject(requireEnv('APPWRITE_PROJECT_ID'))
+    .setKey(requireEnv('APPWRITE_API_KEY'))
 
   return {
     client,
@@ -21,8 +27,8 @@ export async function verifyJWT(token: string): Promise<{ id: string; email: str
   try {
     // Use a client-scoped session to verify the JWT
     const client = new Client()
-      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
-      .setProject(process.env.APPWRITE_PROJECT_ID!)
+      .setEndpoint(requireEnv('APPWRITE_ENDPOINT'))
+      .setProject(requireEnv('APPWRITE_PROJECT_ID'))
       .setJWT(token)
 
     // If the JWT is valid, we can get the account info
