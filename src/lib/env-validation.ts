@@ -35,9 +35,6 @@ export interface EnvironmentVariables {
   VITE_SITE_URL?: string;
   VITE_SUPPORT_EMAIL?: string;
   VITE_APP_VERSION?: string;
-
-  // Tracking (optional)
-  VITE_OPIK_API_KEY?: string;
 }
 
 export interface EnvironmentValidationResult {

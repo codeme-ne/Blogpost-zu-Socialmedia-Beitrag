@@ -4,13 +4,9 @@
 // - Unstructured API for documents/images OCR: UNSTRUCTURED_API_KEY, UNSTRUCTURED_API_URL (optional)
 // - Deepgram for audio speech-to-text: DEEPGRAM_API_KEY
 
-export const config = { runtime: 'edge' } as const;
+import { createCorsResponse, handlePreflight } from './utils/cors.js';
 
-const CORS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+export const config = { runtime: 'edge' } as const;
 
 const MAX_BYTES = 20 * 1024 * 1024; // 20MB
 
@@ -124,21 +120,23 @@ function pickKind(file: File): 'audio' | 'pdf' | 'docx' | 'image' | 'text' | 'un
 }
 
 export default async function handler(req: Request) {
+  const origin = req.headers.get('origin');
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: { ...CORS, 'Access-Control-Allow-Headers': 'Content-Type' } });
+    return handlePreflight(origin);
   }
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { ...CORS, 'Content-Type': 'application/json' } });
+    return createCorsResponse({ error: 'Method not allowed' }, { status: 405, origin });
   }
   try {
     const form = await req.formData();
     const files = form.getAll('file').filter((v): v is File => v instanceof File);
     if (!files.length) {
-      return new Response(JSON.stringify({ error: 'No file uploaded. Use field name "file".' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
+      return createCorsResponse({ error: 'No file uploaded. Use field name "file".' }, { status: 400, origin });
     }
     const file = files[0];
     if (file.size > MAX_BYTES) {
-      return new Response(JSON.stringify({ error: 'File too large. Max 20MB.' }), { status: 413, headers: { ...CORS, 'Content-Type': 'application/json' } });
+      return createCorsResponse({ error: 'File too large. Max 20MB.' }, { status: 413, origin });
     }
 
     const kind = pickKind(file);
@@ -159,7 +157,7 @@ export default async function handler(req: Request) {
     }
 
     if (!payload.text || payload.text.trim().length === 0) {
-      return new Response(JSON.stringify({ error: 'Extraction produced empty text.' }), { status: 422, headers: { ...CORS, 'Content-Type': 'application/json' } });
+      return createCorsResponse({ error: 'Extraction produced empty text.' }, { status: 422, origin });
     }
 
     // Extract links from text for convenience (HTTP/HTTPS only)
@@ -182,10 +180,10 @@ export default async function handler(req: Request) {
       payload.meta = { ...(payload.meta || {}), links };
     } catch { /* noop */ }
 
-    return new Response(JSON.stringify(payload), { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } });
+    return createCorsResponse(payload, { status: 200, origin });
   } catch (err: unknown) {
     console.error('extract-file error', err);
     const msg = (err as { message?: string })?.message || 'Internal error';
-    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
+    return createCorsResponse({ error: msg }, { status: 500, origin });
   }
 }

@@ -1,5 +1,6 @@
 import { createCorsResponse, handlePreflight } from '../../utils/cors.js';
 import { parseJsonSafely } from '../../utils/safeJson.js';
+import { verifyJWT, getServerDatabases, DB_ID, Query } from '../../utils/appwrite.js';
 
 export const config = {
   runtime: 'edge',
@@ -7,6 +8,7 @@ export const config = {
 };
 
 const DEFAULT_OPENROUTER_MODEL = (process.env.OPENROUTER_MODEL || 'openrouter/auto').trim() || 'openrouter/auto'
+const FREE_GENERATIONS_PER_DAY = 3
 
 function normalizeOpenRouterApiKey(rawKey: string | undefined): string | null {
   if (!rawKey) return null
@@ -104,6 +106,49 @@ export default async function handler(req: Request) {
   }
 
   try {
+    // Verify JWT authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return createCorsResponse({
+        error: 'Authentication required',
+        code: 'AUTH_REQUIRED'
+      }, { status: 401, origin });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const user = await verifyJWT(token);
+    if (!user) {
+      return createCorsResponse({
+        error: 'Invalid or expired token',
+        code: 'AUTH_INVALID'
+      }, { status: 401, origin });
+    }
+
+    // Server-side free tier enforcement: check subscription and daily usage
+    const databases = getServerDatabases();
+    const subs = await databases.listDocuments(DB_ID, 'subscriptions', [
+      Query.equal('user_id', user.id),
+      Query.equal('is_active', true),
+      Query.limit(1),
+    ]);
+    const isPremium = subs.documents.length > 0;
+
+    if (!isPremium) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const usage = await databases.listDocuments(DB_ID, 'generation_usage', [
+        Query.equal('user_id', user.id),
+        Query.greaterThanEqual('generated_at', todayStart.toISOString()),
+        Query.limit(FREE_GENERATIONS_PER_DAY + 1),
+      ]);
+      if (usage.documents.length >= FREE_GENERATIONS_PER_DAY) {
+        return createCorsResponse({
+          error: 'Tageslimit erreicht. Upgrade auf Pro fuer unbegrenzte Generierungen.',
+          code: 'FREE_TIER_LIMIT_REACHED'
+        }, { status: 429, origin });
+      }
+    }
+
     // Validate and parse request body with size limit (100KB for AI prompts)
     const parseResult = await parseJsonSafely<{ messages?: unknown[]; [key: string]: unknown }>(req, 100 * 1024);
     if (!parseResult.success) {
@@ -222,6 +267,15 @@ export default async function handler(req: Request) {
 
       // Transform OpenRouter response to Anthropic format for client compatibility
       const anthropicFormatData = transformResponseToAnthropic(openRouterData);
+
+      // Record usage for free-tier tracking (fire-and-forget)
+      if (!isPremium) {
+        const { ID } = await import('node-appwrite');
+        databases.createDocument(DB_ID, 'generation_usage', ID.unique(), {
+          user_id: user.id,
+          generated_at: new Date().toISOString(),
+        }).catch(() => { /* non-critical */ });
+      }
 
       return createCorsResponse(anthropicFormatData, { status: 200, origin });
 

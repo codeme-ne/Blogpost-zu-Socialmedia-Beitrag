@@ -344,28 +344,50 @@ export default async function handler(req: Request) {
   })
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 async function sendWelcomeEmail(email: string, details: {
   amount: number
   currency: string
   interval: string
 }) {
   const apiKey = process.env.RESEND_API_KEY
-  const siteUrl = (process.env.VITE_SITE_URL || process.env.VITE_BASE_URL || 'https://linkedin-posts-one.vercel.app').replace(/\/$/, '')
+  const rawSiteUrl = (process.env.VITE_SITE_URL || process.env.VITE_BASE_URL || 'https://linkedin-posts-one.vercel.app').replace(/\/$/, '')
   if (!apiKey || !email) return
 
-  const subject = details.interval === 'yearly'
+  // Validate siteUrl is a proper URL to prevent injection
+  try {
+    const parsed = new URL(rawSiteUrl)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return
+  } catch {
+    return
+  }
+
+  const siteUrl = escapeHtml(rawSiteUrl)
+  const isYearly = details.interval === 'yearly'
+
+  const subject = isYearly
     ? 'Willkommen bei Social Transformer - Ihr Jahres-Abo ist aktiv!'
     : 'Willkommen bei Social Transformer - Ihr Pro-Abo ist aktiv!'
 
-  const euros = details.amount.toFixed(2)
+  const euros = escapeHtml(details.amount.toFixed(2))
+  const planLabel = isYearly ? 'Yearly Pro' : 'Monthly Pro'
+  const aboLabel = isYearly ? 'Jahres-Abo' : 'Pro-Abo'
   const html = `
     <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height:1.6; color:#0f172a;">
       <h2 style="margin:0 0 16px; color:#1f2937;">Willkommen bei Social Transformer!</h2>
-      <p>Vielen Dank fuer Ihren Kauf. Ihr ${details.interval === 'yearly' ? 'Jahres-Abo' : 'Pro-Abo'} ist jetzt aktiv!</p>
+      <p>Vielen Dank fuer Ihren Kauf. Ihr ${aboLabel} ist jetzt aktiv!</p>
 
       <div style="background:#f8fafc; padding:16px; border-radius:8px; margin:16px 0;">
         <h3 style="margin:0 0 8px; color:#374151;">Ihre Bestellung:</h3>
-        <p style="margin:4px 0;"><strong>Plan:</strong> ${details.interval === 'yearly' ? 'Yearly Pro' : 'Monthly Pro'}</p>
+        <p style="margin:4px 0;"><strong>Plan:</strong> ${planLabel}</p>
         <p style="margin:4px 0;"><strong>Betrag:</strong> EUR ${euros}</p>
       </div>
 

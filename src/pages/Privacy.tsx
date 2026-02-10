@@ -168,16 +168,16 @@ export default function Privacy() {
           <section>
             <h2 className="text-2xl font-semibold mt-8 mb-4">6. Externe Dienste und Datenübermittlungen</h2>
             
-            <h3 className="text-xl font-semibold mt-6 mb-3">Supabase</h3>
+            <h3 className="text-xl font-semibold mt-6 mb-3">Appwrite Cloud</h3>
             <p className="mb-4">
-              Wir nutzen Supabase für die Authentifizierung, Datenspeicherung und Backend-Services. Supabase ist ein 
-              Open-Source-Backend-Service mit Sitz in den USA. Ihre Registrierungsdaten, generierten Posts und 
-              Kontoeinstellungen werden sicher in der Supabase-Datenbank gespeichert.
+              Wir nutzen Appwrite Cloud für die Authentifizierung, Datenspeicherung und Backend-Services. Appwrite Cloud
+              wird in Frankfurt (Deutschland) gehostet und unterliegt der DSGVO. Ihre Registrierungsdaten, generierten
+              Posts und Kontoeinstellungen werden sicher in der Appwrite-Datenbank in Frankfurt gespeichert.
             </p>
             <p className="mb-4">
-              Die Datenübermittlung erfolgt auf Grundlage von Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) und Art. 6 
-              Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem zuverlässigen Service). Supabase verfügt über angemessene 
-              Garantien für den Datenschutz und die Datensicherheit.
+              Die Datenverarbeitung erfolgt auf Grundlage von Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) und Art. 6
+              Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem zuverlässigen Service). Da die Daten innerhalb der EU
+              (Frankfurt, Deutschland) verarbeitet werden, ist keine Drittlandübermittlung erforderlich.
             </p>
 
             <h3 className="text-xl font-semibold mt-6 mb-3">Stripe (Zahlungsabwicklung)</h3>

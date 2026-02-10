@@ -339,7 +339,6 @@ export async function generateOpenRouterMessage(
           'anthropic-version': '2023-06-01',
         },
         timeout: opts.timeout ?? 25000,
-        skipAuth: true,
       }
     );
   } catch (error) {

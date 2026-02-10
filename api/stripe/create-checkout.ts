@@ -3,6 +3,23 @@ import { verifyJWT } from '../utils/appwrite.js'
 import { parseJsonSafely } from '../utils/safeJson.js'
 import { createCorsResponse, handlePreflight } from '../utils/cors.js'
 
+// Allowed origins for successUrl/cancelUrl to prevent open redirect
+const ALLOWED_ORIGINS = [
+  'https://linkedin-posts-one.vercel.app',
+  'https://transformer.social',
+  'http://localhost:5173',
+  'http://localhost:3001',
+];
+
+function isAllowedRedirectUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ALLOWED_ORIGINS.some(origin => parsed.origin === origin);
+  } catch {
+    return false;
+  }
+}
+
 export const config = {
   runtime: 'edge',
 }
@@ -53,6 +70,11 @@ export default async function handler(req: Request) {
 
     if (!successUrl || !cancelUrl) {
       return createCorsResponse({ error: 'Success and cancel URLs are required' }, { status: 400, origin })
+    }
+
+    // Validate redirect URLs against allowed origins to prevent open redirect
+    if (!isAllowedRedirectUrl(successUrl) || !isAllowedRedirectUrl(cancelUrl)) {
+      return createCorsResponse({ error: 'Invalid redirect URL' }, { status: 400, origin })
     }
 
     if (!['payment', 'subscription'].includes(mode)) {

@@ -325,9 +325,7 @@ export function getEnvironmentConfig() {
         legacy: import.meta.env.VITE_STRIPE_PAYMENT_LINK
       }
     },
-    tracking: {
-      opikApiKey: import.meta.env.VITE_OPIK_API_KEY
-    }
+    tracking: {}
   };
 }
 
