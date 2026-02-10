@@ -17,18 +17,20 @@ function getClient(): Client {
   return _client
 }
 
-// Public accessors (lazy)
+// Public accessors (lazy) — bind methods to real instance to preserve `this` context
 export const account = new Proxy({} as Account, {
-  get: (_target, prop) => {
+  get: (_target, prop: string | symbol) => {
     if (!_account) _account = new Account(getClient())
-    return (_account as any)[prop]
+    const value = Reflect.get(_account, prop)
+    return typeof value === 'function' ? value.bind(_account) : value
   },
 })
 
 export const databases = new Proxy({} as Databases, {
-  get: (_target, prop) => {
+  get: (_target, prop: string | symbol) => {
     if (!_databases) _databases = new Databases(getClient())
-    return (_databases as any)[prop]
+    const value = Reflect.get(_databases, prop)
+    return typeof value === 'function' ? value.bind(_databases) : value
   },
 })
 
@@ -46,7 +48,7 @@ const COLLECTIONS = {
 export { getClient as getAppwriteClient }
 // Re-export client getter for Realtime subscriptions
 export const client = new Proxy({} as Client, {
-  get: (_target, prop) => (getClient() as any)[prop],
+  get: (_target, prop: string | symbol) => Reflect.get(getClient(), prop),
 })
 
 // --- Types ---
@@ -136,6 +138,35 @@ export const getSavedPosts = async () => {
   return response.documents.map(mapDocument)
 }
 
+// Full export needs all documents, not only the SDK default page size.
+export const getSavedPostsForExport = async () => {
+  const user = await account.get()
+  const limit = 100
+  let offset = 0
+  const all: SavedPost[] = []
+
+  while (true) {
+    const response = await databases.listDocuments(
+      DB_ID,
+      COLLECTIONS.saved_posts,
+      [
+        Query.equal('user_id', user.$id),
+        Query.orderDesc('$createdAt'),
+        Query.limit(limit),
+        Query.offset(offset),
+      ]
+    )
+
+    const page = response.documents.map(mapDocument)
+    all.push(...page)
+
+    offset += page.length
+    if (page.length === 0 || offset >= response.total) break
+  }
+
+  return all
+}
+
 export const deleteSavedPost = async (id: string) => {
   await databases.deleteDocument(DB_ID, COLLECTIONS.saved_posts, id)
 }
@@ -147,12 +178,12 @@ export const updateSavedPost = async (id: string, content: string) => {
 // --- Auth Helpers ---
 
 const getRedirectUrl = () => {
-  const envSiteUrl = (import.meta.env.VITE_SITE_URL || import.meta.env.VITE_BASE_URL) as string | undefined
-  if (envSiteUrl && envSiteUrl.trim().length > 0) return envSiteUrl.trim().replace(/\/$/, '')
-
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin
   }
+
+  const envSiteUrl = (import.meta.env.VITE_SITE_URL || import.meta.env.VITE_BASE_URL) as string | undefined
+  if (envSiteUrl && envSiteUrl.trim().length > 0) return envSiteUrl.trim().replace(/\/$/, '')
 
   return 'https://linkedin-posts-one.vercel.app'
 }
@@ -163,11 +194,26 @@ export const signInWithEmail = async (email: string) => {
     await account.createMagicURLToken(
       ID.unique(),
       email,
-      `${getRedirectUrl()}/app`
+      `${getRedirectUrl()}/auth/verify`
     )
     return { error: null }
   } catch (error) {
     return { error }
+  }
+}
+
+// Sign Up + Magic Link verification (no auto-login)
+export const signUpAndSendMagicLink = async (email: string, password: string) => {
+  try {
+    await account.create(ID.unique(), email, password)
+    await account.createMagicURLToken(
+      ID.unique(),
+      email,
+      `${getRedirectUrl()}/auth/verify`
+    )
+    return { data: { emailSent: true }, error: null }
+  } catch (error: unknown) {
+    return { data: null, error }
   }
 }
 
@@ -292,19 +338,40 @@ export const createJWT = async (): Promise<string | null> => {
 export const onAuthStateChange = (
   callback: (event: string, session: SessionData | null) => void
 ) => {
-  // Subscribe to account events via Appwrite Realtime
-  const unsubscribe = client.subscribe('account', async (response) => {
-    // Determine event type from Appwrite events
-    const events = response.events || []
-    const isSessionCreate = events.some((e: string) => e.includes('sessions') && e.includes('create'))
-    const isSessionDelete = events.some((e: string) => e.includes('sessions') && e.includes('delete'))
+  try {
+    // Subscribe to account events via Appwrite Realtime
+    const unsubscribe = client.subscribe('account', async (response) => {
+      // Determine event type from Appwrite events
+      const events = response.events || []
+      const isSessionCreate = events.some((e: string) => e.includes('sessions') && e.includes('create'))
+      const isSessionDelete = events.some((e: string) => e.includes('sessions') && e.includes('delete'))
 
-    if (isSessionDelete) {
-      callback('SIGNED_OUT', null)
-      return
-    }
+      if (isSessionDelete) {
+        callback('SIGNED_OUT', null)
+        return
+      }
 
-    if (isSessionCreate) {
+      if (isSessionCreate) {
+        try {
+          const user = await account.get()
+          let accessToken = ''
+          try {
+            const jwt = await account.createJWT()
+            accessToken = jwt.jwt
+          } catch {
+            // non-critical
+          }
+          callback('SIGNED_IN', {
+            user: mapUserToAppwriteUser(user),
+            access_token: accessToken,
+          })
+        } catch {
+          callback('SIGNED_OUT', null)
+        }
+        return
+      }
+
+      // For other account events, check current state and issue fresh JWT
       try {
         const user = await account.get()
         let accessToken = ''
@@ -312,44 +379,35 @@ export const onAuthStateChange = (
           const jwt = await account.createJWT()
           accessToken = jwt.jwt
         } catch {
-          // non-critical
+          // JWT creation may fail — non-critical
         }
-        callback('SIGNED_IN', {
+        callback('TOKEN_REFRESHED', {
           user: mapUserToAppwriteUser(user),
           access_token: accessToken,
         })
       } catch {
         callback('SIGNED_OUT', null)
       }
-      return
-    }
+    })
 
-    // For other account events, check current state and issue fresh JWT
-    try {
-      const user = await account.get()
-      let accessToken = ''
-      try {
-        const jwt = await account.createJWT()
-        accessToken = jwt.jwt
-      } catch {
-        // JWT creation may fail — non-critical
-      }
-      callback('TOKEN_REFRESHED', {
-        user: mapUserToAppwriteUser(user),
-        access_token: accessToken,
-      })
-    } catch {
-      callback('SIGNED_OUT', null)
-    }
-  })
-
-  // Return compatible subscription object
-  return {
-    data: {
-      subscription: {
-        unsubscribe,
+    // Return compatible subscription object
+    return {
+      data: {
+        subscription: {
+          unsubscribe,
+        },
       },
-    },
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) console.error('Failed to subscribe to auth state changes:', error)
+    // Return no-op subscription to prevent crashes
+    return {
+      data: {
+        subscription: {
+          unsubscribe: () => {},
+        },
+      },
+    }
   }
 }
 

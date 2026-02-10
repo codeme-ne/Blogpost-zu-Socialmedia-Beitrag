@@ -1,5 +1,6 @@
 import { verifyJWT, getServerDatabases, DB_ID, Query } from '../utils/appwrite.js'
 import { parseJsonSafely } from '../utils/safeJson.js'
+import { createCorsResponse, handlePreflight } from '../utils/cors.js'
 
 export const config = {
   runtime: 'edge',
@@ -23,46 +24,49 @@ function isAllowedReturnUrl(url: string): boolean {
 }
 
 export default async function handler(req: Request) {
+  const origin = req.headers.get('origin');
+
+  if (req.method === 'OPTIONS') {
+    return handlePreflight(origin);
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+    return createCorsResponse({ error: 'Method not allowed' }, { status: 405, origin });
   }
 
   try {
     // Validate authentication via Appwrite JWT
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response('Nicht angemeldet', { status: 401 });
+      return createCorsResponse({ error: 'Nicht angemeldet' }, { status: 401, origin });
     }
 
     const token = authHeader.replace('Bearer ', '');
     const user = await verifyJWT(token);
 
     if (!user) {
-      return new Response('Ungueltiger Auth Token', { status: 401 });
+      return createCorsResponse({ error: 'Ungueltiger Auth Token' }, { status: 401, origin });
     }
 
     // Parse request body with size limit
     const parseResult = await parseJsonSafely<{ returnUrl?: string }>(req, 10 * 1024);
 
     if (!parseResult.success) {
-      return new Response(
-        JSON.stringify({ error: parseResult.error }),
-        { status: parseResult.error.includes('too large') ? 413 : 400, headers: { 'Content-Type': 'application/json' } }
+      return createCorsResponse(
+        { error: parseResult.error },
+        { status: parseResult.error.includes('too large') ? 413 : 400, origin }
       );
     }
 
     const { returnUrl } = parseResult.data;
 
     if (!returnUrl) {
-      return new Response('Return URL ist erforderlich', { status: 400 });
+      return createCorsResponse({ error: 'Return URL ist erforderlich' }, { status: 400, origin });
     }
 
     // Validate returnUrl against allowed origins to prevent open redirect
     if (!isAllowedReturnUrl(returnUrl)) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid return URL' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return createCorsResponse({ error: 'Invalid return URL' }, { status: 400, origin });
     }
 
     // Get user's subscription with customerId
@@ -73,13 +77,13 @@ export default async function handler(req: Request) {
     ]);
 
     if (subs.documents.length === 0) {
-      return new Response('Du hast noch kein Billing-Konto. Kaufe zuerst ein Abo.', { status: 400 });
+      return createCorsResponse({ error: 'Du hast noch kein Billing-Konto. Kaufe zuerst ein Abo.' }, { status: 400, origin });
     }
 
     const subscription = subs.documents[0];
 
     if (!subscription.stripe_customer_id) {
-      return new Response('Kein Stripe Customer ID gefunden. Kontaktiere den Support.', { status: 400 });
+      return createCorsResponse({ error: 'Kein Stripe Customer ID gefunden. Kontaktiere den Support.' }, { status: 400, origin });
     }
 
     // Initialize Stripe
@@ -97,26 +101,16 @@ export default async function handler(req: Request) {
       throw new Error('Portal session URL nicht erhalten');
     }
 
-    return new Response(JSON.stringify({
-      url: portalSession.url
-    }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    return createCorsResponse({ url: portalSession.url }, { status: 200, origin });
 
   } catch (error) {
     console.error('Customer Portal Error:', error);
 
+    const isDevelopment = process.env.NODE_ENV === 'development';
     const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
-    return new Response(JSON.stringify({
-      error: errorMessage
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    return createCorsResponse(
+      { error: 'Fehler beim Erstellen des Customer Portals.', ...(isDevelopment && { details: errorMessage }) },
+      { status: 500, origin }
+    );
   }
 }

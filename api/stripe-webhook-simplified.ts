@@ -3,13 +3,8 @@ import { getServerDatabases, getUserIdByEmail, createUser, DB_ID, Query } from '
 import { ID } from 'node-appwrite'
 
 // Fix TypeScript definition issues - some fields exist in API but not in types
-declare module 'stripe' {
-  namespace Stripe {
-    interface Invoice {
-      subscription?: string | Stripe.Subscription | null;
-    }
-  }
-}
+// eslint-disable-next-line @typescript-eslint/no-namespace
+declare module 'stripe' { namespace Stripe { interface Invoice { subscription?: string | Stripe.Subscription | null } } }
 
 // Type for subscription item with period fields (API version 2025-08-27.basil)
 interface SubscriptionItemWithPeriod extends Stripe.SubscriptionItem {
@@ -84,16 +79,17 @@ export default async function handler(req: Request) {
     await databases.createDocument(
       DB_ID,
       'processed_webhooks',
-      ID.unique(),
+      event.id,
       {
         event_id: event.id,
         event_type: event.type,
         processed_at: new Date().toISOString()
       }
     )
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Check for duplicate (Appwrite unique index violation)
-    if (e?.code === 409 || e?.type === 'document_already_exists') {
+    const appwriteError = e as { code?: number; type?: string }
+    if (appwriteError?.code === 409 || appwriteError?.type === 'document_already_exists') {
       console.log(`Duplicate webhook event ${event.id}, skipping`)
       return new Response(JSON.stringify({ received: true, duplicate: true }), {
         status: 200,
@@ -354,6 +350,7 @@ async function sendWelcomeEmail(email: string, details: {
   interval: string
 }) {
   const apiKey = process.env.RESEND_API_KEY
+  const siteUrl = (process.env.VITE_SITE_URL || process.env.VITE_BASE_URL || 'https://linkedin-posts-one.vercel.app').replace(/\/$/, '')
   if (!apiKey || !email) return
 
   const subject = details.interval === 'yearly'
@@ -373,7 +370,7 @@ async function sendWelcomeEmail(email: string, details: {
       </div>
 
       <p><strong>Jetzt loslegen:</strong><br>
-      <a href="https://transformer.social/app" style="color:#2563eb; text-decoration:none;">Social Transformer App oeffnen</a></p>
+      <a href="${siteUrl}/app" style="color:#2563eb; text-decoration:none;">Social Transformer App oeffnen</a></p>
 
       <p>Sie haben jetzt Zugang zu allen Premium-Features:</p>
       <ul>

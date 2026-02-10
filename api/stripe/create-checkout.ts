@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { verifyJWT } from '../utils/appwrite.js'
 import { parseJsonSafely } from '../utils/safeJson.js'
+import { createCorsResponse, handlePreflight } from '../utils/cors.js'
 
 export const config = {
   runtime: 'edge',
@@ -17,8 +18,14 @@ function getStripe(): Stripe {
 }
 
 export default async function handler(req: Request) {
+  const origin = req.headers.get('origin')
+
+  if (req.method === 'OPTIONS') {
+    return handlePreflight(origin)
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return createCorsResponse({ error: 'Method not allowed' }, { status: 405, origin })
   }
 
   try {
@@ -32,39 +39,24 @@ export default async function handler(req: Request) {
     }>(req, 10 * 1024);
 
     if (!parseResult.success) {
-      return new Response(
-        JSON.stringify({ error: parseResult.error }),
-        { status: parseResult.error.includes('too large') ? 413 : 400, headers: { 'Content-Type': 'application/json' } }
+      return createCorsResponse(
+        { error: parseResult.error },
+        { status: parseResult.error.includes('too large') ? 413 : 400, origin }
       );
     }
 
     const { priceId, mode = 'payment', successUrl, cancelUrl } = parseResult.data
 
     if (!priceId) {
-      return new Response(JSON.stringify({ error: 'Price ID is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
+      return createCorsResponse({ error: 'Price ID is required' }, { status: 400, origin })
     }
 
     if (!successUrl || !cancelUrl) {
-      return new Response(
-        JSON.stringify({ error: 'Success and cancel URLs are required' }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      )
+      return createCorsResponse({ error: 'Success and cancel URLs are required' }, { status: 400, origin })
     }
 
     if (!['payment', 'subscription'].includes(mode)) {
-      return new Response(
-        JSON.stringify({ error: 'Mode must be either "payment" or "subscription"' }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      )
+      return createCorsResponse({ error: 'Mode must be either "payment" or "subscription"' }, { status: 400, origin })
     }
 
     // Get user from Authorization header (Appwrite JWT)
@@ -124,19 +116,14 @@ export default async function handler(req: Request) {
 
     const session = await stripe.checkout.sessions.create(sessionParams)
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    })
+    return createCorsResponse({ url: session.url }, { status: 200, origin })
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
     console.error('Stripe checkout creation error:', err)
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
+    const isDevelopment = process.env.NODE_ENV === 'development'
+    return createCorsResponse(
+      { error: 'Failed to create checkout session.', ...(isDevelopment && { details: err.message }) },
+      { status: 500, origin }
     )
   }
 }

@@ -1,31 +1,19 @@
 import { useEffect, useState } from 'react'
-import { getCurrentUser, onAuthStateChange } from '@/api/appwrite'
+import { useAuth as useAuthContext } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
 
 export const useAuth = () => {
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const { user } = useAuthContext()
   const [loginOpen, setLoginOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
 
+  const userEmail = user?.email ?? null
+
+  // Close login modal when user signs in
   useEffect(() => {
-    getCurrentUser().then((user) => {
-      setUserEmail(user?.email ?? null)
-    })
-    const { data: sub } = onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user.email ?? null)
-      if (session) setLoginOpen(false)
-    })
-    return () => {
-      try {
-        if (sub?.subscription) {
-          sub.subscription.unsubscribe()
-        }
-      } catch (error) {
-        console.error('Failed to cleanup auth subscription:', error)
-      }
-    }
-  }, [])
+    if (user) setLoginOpen(false)
+  }, [user])
 
   // Show welcome toast once when redirected after signup confirmation
   useEffect(() => {
