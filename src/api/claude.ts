@@ -1,7 +1,16 @@
 import { buildSinglePostPrompt, buildBatchedPostPrompt, parseBatchedResponse } from '@/libs/promptBuilder';
 import { generateOpenRouterMessage } from '@/libs/api-client';
+import type { OpenRouterMessageResponse } from '@/libs/api-client';
 import type { Platform } from '@/config/platforms';
 import { OPENROUTER_MODEL } from '@/config/ai';
+
+function extractText(response: OpenRouterMessageResponse): string {
+  const block = response.content?.[0];
+  if (!block || typeof block !== 'object' || !('text' in block) || typeof block.text !== 'string') {
+    throw new Error('Invalid AI response: expected text block');
+  }
+  return block.text;
+}
 
 export async function linkedInPostsFromNewsletter(content: string) {
   try {
@@ -13,7 +22,7 @@ export async function linkedInPostsFromNewsletter(content: string) {
      messages: [{ role: 'user', content: prompt }],
    });
 
-   const text = response.content[0].text;
+   const text = extractText(response);
    // Parse single LinkedIn post
    const regex = /LINKEDIN:\s*([\s\S]*?)$/;
    const match = text.match(regex);
@@ -90,7 +99,7 @@ export async function xTweetsFromBlog(content: string) {
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = response.content[0].text.trim();
+    const text = extractText(response).trim();
 
     // Parse single tweet - take the first non-empty line
     const cleanedTweet = sanitizeTweet(text);
@@ -113,7 +122,7 @@ export async function instagramPostsFromBlog(content: string) {
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = response.content[0].text;
+    const text = extractText(response);
 
     // Parse single Instagram post from XML tags
     const descriptionsMatch = text.match(/<instagram_descriptions>([\s\S]*?)<\/instagram_descriptions>/i);
@@ -169,14 +178,14 @@ export async function batchedPostsFromContent(
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = response.content[0].text;
+    const text = extractText(response);
 
     // Parse batched response
     const parsed = parseBatchedResponse(text, platforms);
 
     return parsed; // Returns null if parsing failed, triggering fallback
   } catch (error) {
-    console.error('Batched generation failed:', error);
+    if (import.meta.env.DEV) console.error('Batched generation failed:', error);
     return null; // Signal fallback to parallel calls
   }
 }

@@ -67,7 +67,7 @@ export function ButtonCheckout({
       window.location.href = data.url
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error))
-      console.error('Checkout error:', err)
+      if (import.meta.env.DEV) console.error('Checkout error:', err)
       toast.error(
         err.message === 'Checkout creation failed'
           ? 'Fehler beim Erstellen der Bezahlung. Bitte versuchen Sie es erneut.'

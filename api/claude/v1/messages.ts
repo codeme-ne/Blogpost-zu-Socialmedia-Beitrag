@@ -1,6 +1,7 @@
 import { createCorsResponse, handlePreflight } from '../../utils/cors.js';
 import { parseJsonSafely } from '../../utils/safeJson.js';
 import { verifyJWT, getServerDatabases, DB_ID, Query } from '../../utils/appwrite.js';
+import { checkRateLimit, getClientIp } from '../../utils/rateLimit.js';
 
 export const config = {
   runtime: 'edge',
@@ -122,6 +123,17 @@ export default async function handler(req: Request) {
         error: 'Invalid or expired token',
         code: 'AUTH_INVALID'
       }, { status: 401, origin });
+    }
+
+    // Rate limiting: 20 requests per minute per IP
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(`chat:${ip}`, { maxRequests: 20, windowMs: 60_000 });
+    if (rl.limited) {
+      return createCorsResponse({
+        error: 'Too many requests. Please try again later.',
+        code: 'RATE_LIMITED',
+        retryAfter: rl.retryAfterSeconds
+      }, { status: 429, origin, headers: { 'Retry-After': String(rl.retryAfterSeconds) } });
     }
 
     // Server-side free tier enforcement: check subscription and daily usage

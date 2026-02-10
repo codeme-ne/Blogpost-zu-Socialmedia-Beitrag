@@ -4,51 +4,39 @@ export const config = {
   runtime: 'edge',
 };
 
-// CORS headers setup
-const setCorsHeaders = (headers: Headers): Headers => {
-  const origin = process.env.NODE_ENV === 'production'
-    ? 'https://linkedin-posts-one.vercel.app'
-    : 'http://localhost:5173';
-
-  headers.set('Access-Control-Allow-Origin', origin);
-  headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  headers.set('Access-Control-Max-Age', '86400');
-
-  return headers;
-};
+import { createCorsResponse, handlePreflight } from '../utils/cors.js';
+import { verifyJWT } from '../utils/appwrite.js';
 
 export default async function handler(req: Request) {
-  const headers = setCorsHeaders(new Headers());
+  const origin = req.headers.get('origin');
 
   // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers });
+    return handlePreflight(origin);
   }
 
   // Only allow POST requests
   if (req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
-      {
-        status: 405,
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      }
-    );
+    return createCorsResponse({ error: 'Method not allowed' }, { status: 405, origin });
   }
 
   try {
+    // Verify JWT authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return createCorsResponse({ error: 'Authentication required' }, { status: 401, origin });
+    }
+    const token = authHeader.split(' ')[1];
+    const user = await verifyJWT(token);
+    if (!user) {
+      return createCorsResponse({ error: 'Invalid or expired token' }, { status: 401, origin });
+    }
+
     // Parse request body
     const { content } = await req.json();
 
     if (!content || typeof content !== 'string') {
-      return new Response(
-        JSON.stringify({ error: 'Invalid content provided' }),
-        {
-          status: 400,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        }
-      );
+      return createCorsResponse({ error: 'Invalid content provided' }, { status: 400, origin });
     }
 
     // Get LinkedIn credentials from environment variables
@@ -61,16 +49,10 @@ export default async function handler(req: Request) {
         authorUrn.includes('YOUR_')) {
 
       // Return a response that tells frontend to use fallback
-      return new Response(
-        JSON.stringify({
-          fallback: true,
-          message: 'LinkedIn API not configured, use share dialog'
-        }),
-        {
-          status: 200,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        }
-      );
+      return createCorsResponse({
+        fallback: true,
+        message: 'LinkedIn API not configured, use share dialog'
+      }, { status: 200, origin });
     }
 
     // Create LinkedIn draft post using the API
@@ -106,55 +88,31 @@ export default async function handler(req: Request) {
       const errorData = await linkedinResponse.text();
       console.error('LinkedIn API error:', errorData);
 
-      // Return fallback instead of error to maintain UX
-      return new Response(
-        JSON.stringify({
-          fallback: true,
-          message: 'Could not create draft, use share dialog'
-        }),
-        {
-          status: 200,
-          headers: { ...headers, 'Content-Type': 'application/json' }
-        }
-      );
+      // Return fallback with proper error status
+      return createCorsResponse({
+        fallback: true,
+        message: 'Could not create draft, use share dialog'
+      }, { status: 502, origin });
     }
 
     // Parse the response to get the draft ID
     const responseData = await linkedinResponse.json();
     const draftId = responseData.id;
 
-    // Construct the draft URL
-    // Note: LinkedIn doesn't provide a direct draft edit URL, so we return success
-    // The frontend should show a success message
-    const result = {
+    return createCorsResponse({
       success: true,
       draftId: draftId,
       message: 'Draft created successfully on LinkedIn',
-      // Provide a general LinkedIn posts URL
       linkedinUrl: 'https://www.linkedin.com/in/me/recent-activity/shares/'
-    };
-
-    return new Response(
-      JSON.stringify(result),
-      {
-        status: 200,
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      }
-    );
+    }, { status: 200, origin });
 
   } catch (error) {
     console.error('Error in LinkedIn share handler:', error);
 
-    // Return fallback instead of error for better UX
-    return new Response(
-      JSON.stringify({
-        fallback: true,
-        message: 'Service temporarily unavailable, use share dialog'
-      }),
-      {
-        status: 200,
-        headers: { ...headers, 'Content-Type': 'application/json' }
-      }
-    );
+    // Return fallback with error status
+    return createCorsResponse({
+      fallback: true,
+      message: 'Service temporarily unavailable, use share dialog'
+    }, { status: 503, origin });
   }
 }

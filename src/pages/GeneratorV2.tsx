@@ -311,19 +311,19 @@ export default function GeneratorV2() {
                                             toast.success("LinkedIn Draft erstellt! 🚀");
                                             // Open LinkedIn posts page
                                             if (result.linkedinUrl) {
-                                              window.open(result.linkedinUrl, "_blank");
+                                              window.open(result.linkedinUrl, "_blank", "noopener,noreferrer");
                                             }
                                           } else if (result.fallback) {
                                             // Use share dialog as fallback
                                             const linkedinUrl = createLinkedInShareUrl(postContent);
-                                            window.open(linkedinUrl, "_blank");
+                                            window.open(linkedinUrl, "_blank", "noopener,noreferrer");
                                           } else {
                                             throw new Error(result.error || 'Unknown error');
                                           }
                                         } catch {
                                           // Always fallback to share dialog on error
                                           const linkedinUrl = createLinkedInShareUrl(postContent);
-                                          window.open(linkedinUrl, "_blank");
+                                          window.open(linkedinUrl, "_blank", "noopener,noreferrer");
                                         }
                                       }}
                                       title="Auf LinkedIn teilen"

@@ -11,8 +11,8 @@ export default function ProtectedRoute({ children }: Props) {
 
   useEffect(() => {
     getCurrentUser().then((user) => setIsAuthed(!!user))
-    const { data: sub } = onAuthStateChange((_event, session) => setIsAuthed(!!session))
-    return () => sub?.subscription?.unsubscribe?.()
+    const result = onAuthStateChange((_event, session) => setIsAuthed(!!session))
+    return () => result.data.subscription.unsubscribe()
   }, [])
 
   if (isAuthed === null) return null

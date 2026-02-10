@@ -108,6 +108,8 @@ function truncateContent(content: string): string {
 
 import { getCorsHeaders } from './utils/cors.js';
 import { isUrlSafe } from './utils/urlValidation.js';
+import { verifyJWT } from './utils/appwrite.js';
+import { checkRateLimit, getClientIp } from './utils/rateLimit.js';
 
 export default async function handler(req: Request) {
   // Get CORS headers
@@ -127,6 +129,33 @@ export default async function handler(req: Request) {
   }
 
   try {
+    // Rate limiting: 30 requests per minute per IP
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(`extract:${ip}`, { maxRequests: 30, windowMs: 60_000 });
+    if (rl.limited) {
+      return new Response(JSON.stringify({ error: 'Too many requests' }), {
+        status: 429,
+        headers: { ...cors, 'Content-Type': 'application/json', 'Retry-After': String(rl.retryAfterSeconds) },
+      });
+    }
+
+    // Verify JWT authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), {
+        status: 401,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+      });
+    }
+    const token = authHeader.split(' ')[1];
+    const user = await verifyJWT(token);
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { url } = (await req.json()) as { url?: string };
     
     if (!url || typeof url !== 'string') {

@@ -1,19 +1,26 @@
 import { verifyJWT, getServerDatabases, DB_ID, Query } from './utils/appwrite.js'
+import { createCorsResponse, handlePreflight } from './utils/cors.js'
 
 export const config = {
   runtime: 'edge',
 }
 
 export default async function handler(req: Request) {
+  const origin = req.headers.get('origin')
+
+  if (req.method === 'OPTIONS') {
+    return handlePreflight(origin)
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return createCorsResponse({ error: 'Method not allowed' }, { status: 405, origin })
   }
 
   try {
     // Get authorization token
     const authHeader = req.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response('Missing or invalid authorization header', { status: 401 })
+      return createCorsResponse({ error: 'Missing or invalid authorization header' }, { status: 401, origin })
     }
 
     const token = authHeader.replace('Bearer ', '')
@@ -22,7 +29,7 @@ export default async function handler(req: Request) {
     const user = await verifyJWT(token)
 
     if (!user) {
-      return new Response('Invalid or expired token', { status: 401 })
+      return createCorsResponse({ error: 'Invalid or expired token' }, { status: 401, origin })
     }
 
     const databases = getServerDatabases()
@@ -51,20 +58,14 @@ export default async function handler(req: Request) {
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        activated: activatedCount,
-        message: activatedCount > 0 ? 'Subscriptions activated successfully' : 'No pending subscriptions found'
-      }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    )
+    return createCorsResponse({
+      success: true,
+      activated: activatedCount,
+      message: activatedCount > 0 ? 'Subscriptions activated successfully' : 'No pending subscriptions found'
+    }, { status: 200, origin })
 
   } catch (error) {
     console.error('Reconcile subscription error:', error)
-    return new Response('Internal server error', { status: 500 })
+    return createCorsResponse({ error: 'Internal server error' }, { status: 500, origin })
   }
 }

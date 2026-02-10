@@ -153,7 +153,7 @@ export function UpgradeButton({
       setPaymentWindow(newPaymentWindow);
 
     } catch (error) {
-      console.error('Payment redirect error:', error);
+      if (import.meta.env.DEV) console.error('Payment redirect error:', error);
       const errorMsg = 'Fehler beim Öffnen der Zahlungsseite. Bitte versuche es erneut.';
       setError(errorMsg);
       toast.error(errorMsg, { id: toastId });

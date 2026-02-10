@@ -170,7 +170,7 @@ const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuth
       const posts = await getSavedPosts()
       setSavedPosts(posts)
     } catch (error) {
-      console.error('Failed to load saved posts:', error)
+      if (import.meta.env.DEV) console.error('Failed to load saved posts:', error)
       toast.error('Gespeicherte Beiträge konnten nicht geladen werden.')
     } finally {
       setIsLoading(false)

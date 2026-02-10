@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { linkedInPostsFromNewsletter, xTweetsFromBlog, instagramPostsFromBlog, batchedPostsFromContent } from '@/api/claude'
 import type { Platform } from '@/config/platforms'
@@ -36,6 +36,9 @@ export const useContentGeneration = () => {
   })
   // Single-post state (new)
   const [generatedPosts, setGeneratedPosts] = useState<Partial<Record<Platform, { post: string; regenerationCount: number; isEdited: boolean }>>>({})
+  // Ref to always read latest generatedPosts inside callbacks (avoids stale closure)
+  const generatedPostsRef = useRef(generatedPosts)
+  generatedPostsRef.current = generatedPosts
   const [activeGenerations, setActiveGenerations] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress>({
@@ -208,7 +211,7 @@ export const useContentGeneration = () => {
       throw new Error('Usage limit reached')
     }
 
-    const current = generatedPosts[platform]
+    const current = generatedPostsRef.current[platform]
     const regenerationCount = current?.regenerationCount || 0
     const generationId = `${platform}-${Date.now()}`
     setActiveGenerations((prev) => new Set([...prev, generationId]))
@@ -299,10 +302,10 @@ export const useContentGeneration = () => {
         return next
       })
     }
-  }, [hasUsageRemaining, decrementUsage, generatedPosts, setShowUpgradeModal, setActiveGenerations, setGeneratedPosts])
+  }, [hasUsageRemaining, decrementUsage, setShowUpgradeModal, setActiveGenerations, setGeneratedPosts])
 
   const regeneratePost = async (content: string, platform: Platform, voiceTone?: VoiceTone) => {
-    const current = generatedPosts[platform]
+    const current = generatedPostsRef.current[platform]
     if (current?.isEdited) {
       const proceed = window.confirm('Das Regenerieren überschreibt Ihre Änderungen. Fortfahren?')
       if (!proceed) return null
