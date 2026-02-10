@@ -4,32 +4,32 @@ import './index.css'
 import App from './App.tsx'
 import { BrowserRouter } from 'react-router-dom'
 import { createJWT, verifyMagicURL } from './api/appwrite.ts'
-import { validateClientEnvironment } from '@/lib/env-validation'
+import { checkRequiredClientVars } from '@/lib/env-validation'
 
 // Validate environment variables on startup
-const envValidation = validateClientEnvironment();
+const envValidation = checkRequiredClientVars();
 if (!envValidation.isValid) {
   const errorMessage = `Missing required environment variables: ${envValidation.missing.join(', ')}`;
   console.error('Configuration Error:', errorMessage);
 
-  // Create error display for missing configuration
-  const errorDiv = document.createElement('div');
-  errorDiv.innerHTML = `
-    <div style="
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: #fee; color: #900;
-      padding: 2rem; font-family: monospace;
-      display: flex; align-items: center; justify-content: center;
-      flex-direction: column; z-index: 9999;
-    ">
-      <h1 style="margin-bottom: 1rem;">Configuration Error</h1>
-      <pre style="background: #fff; padding: 1rem; border-radius: 4px; max-width: 800px; overflow: auto;">
-${errorMessage}
-      </pre>
-      <p style="margin-top: 1rem;">Please check your .env file and ensure all required variables are set.</p>
-    </div>
-  `;
-  document.body.appendChild(errorDiv);
+  // Create error display using safe DOM methods (no innerHTML to avoid XSS)
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#fee;color:#900;padding:2rem;font-family:monospace;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;';
+
+  const h1 = document.createElement('h1');
+  h1.style.marginBottom = '1rem';
+  h1.textContent = 'Configuration Error';
+
+  const pre = document.createElement('pre');
+  pre.style.cssText = 'background:#fff;padding:1rem;border-radius:4px;max-width:800px;overflow:auto;';
+  pre.textContent = errorMessage;
+
+  const p = document.createElement('p');
+  p.style.marginTop = '1rem';
+  p.textContent = 'Please check your .env file and ensure all required variables are set.';
+
+  container.append(h1, pre, p);
+  document.body.appendChild(container);
   throw new Error('Environment validation failed');
 }
 

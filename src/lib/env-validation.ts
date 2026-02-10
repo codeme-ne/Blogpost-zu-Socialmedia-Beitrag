@@ -70,9 +70,10 @@ const RECOMMENDED_VARS: (keyof EnvironmentVariables)[] = [
 ];
 
 /**
- * Validate client-side environment variables
+ * Lightweight check for required client env vars (no Zod).
+ * For full schema validation, use validateClientEnvironment from @/config/env.config.
  */
-export function validateClientEnvironment(): EnvironmentValidationResult {
+export function checkRequiredClientVars(): EnvironmentValidationResult {
   const missing = REQUIRED_CLIENT_VARS.filter(varName => !getEnvVar(varName));
   const warnings = RECOMMENDED_VARS.filter(varName => !getEnvVar(varName));
 
@@ -236,7 +237,7 @@ export function getAppConfig() {
  * Initialize and validate environment on startup
  */
 export function initializeEnvironment(): void {
-  const validation = validateClientEnvironment();
+  const validation = checkRequiredClientVars();
 
   if (!validation.isValid) {
     const errorMessage = `Missing required environment variables: ${validation.missing.join(', ')}`;
@@ -279,7 +280,7 @@ export const env = {
   isProd: isProduction(),
 
   // Validation
-  validate: validateClientEnvironment,
+  validate: checkRequiredClientVars,
   validateServer: validateServerEnvironment,
   init: initializeEnvironment
 } as const;
