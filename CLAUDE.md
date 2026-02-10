@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Social Transformer transforms newsletters/blog posts into platform-optimized social media content for LinkedIn, X, and Instagram. React 19 + Vite 7 frontend with Vercel Edge Functions backend, Supabase for auth/database, and Claude AI (via OpenRouter) for generation.
+Social Transformer transforms newsletters/blog posts into platform-optimized social media content for LinkedIn, X, and Instagram. React 19 + Vite 7 frontend with Vercel Edge Functions backend, Appwrite Cloud (Frankfurt) for auth/database, and Claude AI (via OpenRouter) for generation.
 
 **Production**: https://linkedin-posts-one.vercel.app
 
@@ -34,7 +34,7 @@ User Input → URL Extraction (optional) → AI Generation → Display → Save/
 
 1. **Input**: Text directly or URL via `useUrlExtraction` (Jina Reader)
 2. **Generation**: `useContentGeneration` calls `/api/claude/v1/messages` → OpenRouter → Claude
-3. **Output**: Posts keyed by platform in state, can save to Supabase or share directly
+3. **Output**: Posts keyed by platform in state, can save to Appwrite or share directly
 
 ### Generation Strategy
 - **Batched** (default): All platforms in 1 API call (~67% cost savings)
@@ -48,7 +48,7 @@ User Input → URL Extraction (optional) → AI Generation → Display → Save/
 - **useUrlExtraction**: 5-minute TTL cache, deduplication, auto-cleanup at 100 entries
 
 ### Frontend (`src/`)
-- **`api/`** - Client API wrappers (`claude.ts`, `extract.ts`, `supabase.ts`)
+- **`api/`** - Client API wrappers (`appwrite.ts`, `claude.ts`, `extract.ts`)
 - **`config/`** - Centralized config (`app.config.ts` for features/limits, `env.config.ts` for validation)
 - **`hooks/`** - Business logic (generation, extraction, subscription, auth)
 - **`components/`** - UI (shadcn/ui + Radix), organized by type
@@ -60,29 +60,37 @@ Edge Functions with `runtime: 'edge'`. Each handles CORS and returns explicit st
 
 - **`claude/v1/messages.ts`** - Proxies to OpenRouter (maps `claude-3-5-sonnet-20241022` → `anthropic/claude-sonnet-4`)
 - **`extract.ts`** - Jina Reader (free), 30s timeout, SSRF protection
-- **`extract-premium.ts`** - Firecrawl with auth + subscription check, 100/month limit via RPC
-- **`stripe/`** - Checkout and portal creation
-- **`stripe-webhook-simplified.ts`** - Webhook with idempotency via `processed_webhooks` table
+- **`stripe/`** - Checkout and portal creation (JWT auth via Appwrite)
+- **`stripe-webhook-simplified.ts`** - Webhook with idempotency via `processed_webhooks` collection
+- **`utils/appwrite.ts`** - Server-side Appwrite SDK (node-appwrite) with JWT verification
 
-### Database (Supabase)
+### Database (Appwrite Cloud - Frankfurt)
 
-**Tables:**
-- `subscriptions` - Premium status (`is_active` SSOT), Stripe IDs, billing period
-- `saved_posts` - User posts with RLS via `auth.uid()`
-- `profiles` - Premium extraction tracking (`premium_extractions_used`, `premium_extractions_reset_at`)
-- `processed_webhooks` - Webhook idempotency (unique `event_id`)
+**Project ID**: `698afdae002fb5faf679`
+**Database ID**: `social_transformer`
 
-**RPC Functions:**
-- `check_and_increment_premium_extraction()` - Atomic limit check with row-lock
-- `get_user_id_by_email()` - Webhook user lookup fallback
+**Collections:**
+- `subscriptions` (14 attrs, 4 indexes) - Premium status (`is_active` SSOT), Stripe IDs, billing period
+- `saved_posts` (3 attrs, 2 indexes) - User posts with document-level permissions
+- `profiles` (7 attrs, 2 indexes) - Premium extraction tracking
+- `generation_usage` (2 attrs, 2 indexes) - Generation tracking
+- `pending_subscriptions` (12 attrs, 3 indexes) - In-progress subscription handling
+- `processed_webhooks` (3 attrs, 1 unique index) - Webhook idempotency
+- `webhook_anomalies` (5 attrs, 2 indexes) - Stripe anomaly detection
+
+**Auth**: Email/Password + Magic URL via Appwrite Account service. JWT tokens for server-side verification.
 
 ## Key Patterns
 
 **Premium Access**: `subscription.is_active` is single source of truth. Hooks cache for 60s.
 
-**Free Tier Limits**: localStorage counter (`usage_YYYY-MM-DD`), checked against `config.limits.freeExtractions`.
+**Free Tier Limits**: localStorage counter (`usage_YYYY-MM-DD`), checked against `config.limits.freeGenerationsPerDay`.
 
 **API Proxy**: Claude API key stays server-side. Client calls Edge Function which adds OpenRouter key.
+
+**Auth Flow**: Client creates JWT via `account.createJWT()` → sends as Bearer token → Edge Function verifies via `verifyJWT()` in `api/utils/appwrite.ts`.
+
+**Document Permissions**: Saved posts use Appwrite document-level permissions (`Permission.read/update/delete(Role.user(userId))`).
 
 **Temperature Scaling**: Base varies by platform (0.65 X, 0.7 default, 0.85 LinkedIn/Instagram). Regenerations increase progressively (0.75, 0.8, 0.85...).
 
@@ -95,14 +103,14 @@ Edge Functions with `runtime: 'edge'`. Each handles CORS and returns explicit st
 ## Environment Variables
 
 **Client (VITE_ prefix)**:
-- `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (required)
+- `VITE_APPWRITE_ENDPOINT` (required, `https://fra.cloud.appwrite.io/v1`)
+- `VITE_APPWRITE_PROJECT_ID` (required)
 - `VITE_STRIPE_PAYMENT_LINK_MONTHLY`, `VITE_STRIPE_PAYMENT_LINK_YEARLY`
 
 **Server**:
+- `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY` (Appwrite server SDK)
 - `OPENROUTER_API_KEY` or `CLAUDE_API_KEY` (AI generation)
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
-- `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`
-- `FIRECRAWL_API_KEY` (premium extraction)
 
 ## Important Behaviors
 
@@ -118,7 +126,7 @@ Wait ~45-60 seconds after `git push` for Vercel to deploy before testing product
 - **New platform**: `platforms.ts` → `useContentGeneration.ts` → `promptBuilder.ts` → UI
 - **New feature flag**: `app.config.ts` under `features`
 - **New Edge Function**: `api/` with `export const config = { runtime: 'edge' }`, implement CORS
-- **Database change**: Migration in `supabase/migrations/`
+- **Database change**: New collection via Appwrite MCP or Console
 
 ## Code Style
 - TypeScript strict, React functional components
