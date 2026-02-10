@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
-import { env } from "@/config/env.config";
+import { env } from "@/lib/env-validation";
 import { getStripePlan } from "@/config/app.config";
 import {
   User,

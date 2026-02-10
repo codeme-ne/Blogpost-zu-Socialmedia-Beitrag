@@ -8,8 +8,9 @@ import { validateClientEnvironment } from '@/lib/env-validation'
 
 // Validate environment variables on startup
 const envValidation = validateClientEnvironment();
-if (!envValidation.success) {
-  console.error('Configuration Error:', envValidation.error);
+if (!envValidation.isValid) {
+  const errorMessage = `Missing required environment variables: ${envValidation.missing.join(', ')}`;
+  console.error('Configuration Error:', errorMessage);
 
   // Create error display for missing configuration
   const errorDiv = document.createElement('div');
@@ -23,7 +24,7 @@ if (!envValidation.success) {
     ">
       <h1 style="margin-bottom: 1rem;">Configuration Error</h1>
       <pre style="background: #fff; padding: 1rem; border-radius: 4px; max-width: 800px; overflow: auto;">
-${envValidation.error}
+${errorMessage}
       </pre>
       <p style="margin-top: 1rem;">Please check your .env file and ensure all required variables are set.</p>
     </div>
