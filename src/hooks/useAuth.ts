@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getSession, onAuthStateChange } from '@/api/supabase'
+import { getCurrentUser, onAuthStateChange } from '@/api/appwrite'
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
 
@@ -9,8 +9,8 @@ export const useAuth = () => {
   const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
-    getSession().then(({ data }) => {
-      setUserEmail(data.session?.user.email ?? null)
+    getCurrentUser().then((user) => {
+      setUserEmail(user?.email ?? null)
     })
     const { data: sub } = onAuthStateChange((_event, session) => {
       setUserEmail(session?.user.email ?? null)
@@ -34,7 +34,7 @@ export const useAuth = () => {
       const KEY = 'st_welcome_toast_shown'
       const alreadyShown = typeof window !== 'undefined' && window.localStorage.getItem(KEY) === '1'
       if (!alreadyShown) {
-        toast.success('Willkommen! 🎉 - Dein Account ist aktiviert. Viel Spaß beim Remixen!')
+        toast.success('Willkommen! - Dein Account ist aktiviert. Viel Spass beim Remixen!')
         try {
           window.localStorage.setItem(KEY, '1')
         } catch {

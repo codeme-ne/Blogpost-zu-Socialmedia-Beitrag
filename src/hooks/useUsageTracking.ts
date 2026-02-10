@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/api/supabase';
 import { useAuth } from './useAuth';
 import { useSubscription } from './useSubscription';
 import { toast } from 'sonner';
@@ -20,7 +19,7 @@ interface UsageStatus {
  * Provides backward-compatible interface for components using this hook.
  */
 export function useUsageTracking() {
-  const { userEmail } = useAuth();
+  useAuth();
   const { hasAccess, dailyUsage, hasUsageRemaining, decrementUsage, loading: subscriptionLoading } = useSubscription();
 
   const [usageStatus, setUsageStatus] = useState<UsageStatus>({
@@ -36,7 +35,6 @@ export function useUsageTracking() {
   useEffect(() => {
     const legacyKey = 'freeGenerationsCount';
     if (localStorage.getItem(legacyKey) !== null) {
-      console.log('[useUsageTracking] Migrating from legacy freeGenerationsCount to usage_DATE pattern');
       localStorage.removeItem(legacyKey);
     }
   }, []); // Run once on mount
@@ -58,30 +56,21 @@ export function useUsageTracking() {
   }, [hasAccess, dailyUsage, hasUsageRemaining, subscriptionLoading]);
 
   const loadUsageStatus = async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_usage_status');
+    // Usage is now tracked locally via localStorage (usage_DATE pattern)
+    // No server-side RPC needed
+    const limit = config.limits.freeGenerationsPerDay;
+    const today = new Date().toDateString();
+    const used = parseInt(localStorage.getItem(`usage_${today}`) || '0', 10);
+    const remaining = Math.max(0, limit - used);
 
-      if (error) {
-        console.error('Error loading usage status:', error);
-        return;
-      }
-
-      if (data?.success) {
-        setUsageStatus(prev => ({
-          ...prev,
-          canGenerate: data.can_generate || false,
-          isPremium: data.is_premium || false,
-          used: data.used || 0,
-          limit: data.limit || 3,
-          remaining: data.remaining ?? 3,
-          isLoading: false,
-        }));
-      }
-    } catch (err) {
-      console.error('Failed to load usage status:', err);
-    } finally {
-      setUsageStatus(prev => ({ ...prev, isLoading: false }));
-    }
+    setUsageStatus({
+      canGenerate: hasAccess || remaining > 0,
+      isPremium: hasAccess,
+      used,
+      limit,
+      remaining,
+      isLoading: false,
+    });
   };
 
   const checkAndIncrementUsage = async (): Promise<boolean> => {
@@ -94,33 +83,12 @@ export function useUsageTracking() {
     // Check if free tier has remaining usage
     if (!hasUsageRemaining()) {
       toast.error(
-        'Dein kostenloses Limit ist erreicht. Upgrade zu Premium für unlimitierte Generierungen.'
+        'Dein kostenloses Limit ist erreicht. Upgrade zu Premium fuer unlimitierte Generierungen.'
       );
       return false;
     }
 
-    // If user is authenticated, also check backend usage tracking
-    if (userEmail) {
-      try {
-        const { data, error } = await supabase.rpc('check_and_increment_usage');
-
-        if (error) {
-          console.error('Error checking backend usage:', error);
-          // Don't block on backend error, continue with local tracking
-        } else if (!data?.can_generate) {
-          toast.error(
-            'Dein kostenloses Limit ist erreicht. Upgrade zu Premium für unlimitierte Generierungen.'
-          );
-          return false;
-        }
-      } catch (err) {
-        console.error('Failed to check backend usage:', err);
-        // Continue with local tracking on error
-      }
-    }
-
     // Increment usage counter (using useSubscription's decrementUsage)
-    // Note: "decrement" is a naming artifact - it actually increments usage
     decrementUsage();
 
     return true;

@@ -1,28 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
+import { verifyJWT, getServerDatabases, DB_ID, Query } from '../utils/appwrite.js'
 
 export const config = {
   runtime: 'edge',
 };
 
-// Initialize Supabase with anon key for auth validation
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
-);
-
-// Initialize Supabase with service role for database queries
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 interface RequestBody {
   returnUrl: string;
-}
-
-interface SubscriptionRow {
-  id: string;
-  stripe_customer_id: string;
 }
 
 export default async function handler(req: Request) {
@@ -31,40 +14,38 @@ export default async function handler(req: Request) {
   }
 
   try {
-    // Validate authentication
+    // Validate authentication via Appwrite JWT
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return new Response('Nicht angemeldet', { status: 401 });
     }
 
-    // Get user from auth token
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    const token = authHeader.replace('Bearer ', '');
+    const user = await verifyJWT(token);
 
-    if (authError || !user) {
-      console.error('Auth error:', authError);
-      return new Response('Ungültiger Auth Token', { status: 401 });
+    if (!user) {
+      return new Response('Ungueltiger Auth Token', { status: 401 });
     }
 
     // Parse request body
     const body: RequestBody = await req.json();
-    
+
     if (!body.returnUrl) {
       return new Response('Return URL ist erforderlich', { status: 400 });
     }
 
     // Get user's subscription with customerId
-    const { data: subscription, error: subscriptionError } = await supabaseAdmin
-      .from('subscriptions')
-      .select('id, stripe_customer_id')
-      .eq('user_id', user.id)
-      .single() as { data: SubscriptionRow | null; error: any };
+    const databases = getServerDatabases();
+    const subs = await databases.listDocuments(DB_ID, 'subscriptions', [
+      Query.equal('user_id', user.id),
+      Query.limit(1),
+    ]);
 
-    if (subscriptionError || !subscription) {
-      console.error('Subscription fetch error:', subscriptionError);
+    if (subs.documents.length === 0) {
       return new Response('Du hast noch kein Billing-Konto. Kaufe zuerst ein Abo.', { status: 400 });
     }
+
+    const subscription = subs.documents[0];
 
     if (!subscription.stripe_customer_id) {
       return new Response('Kein Stripe Customer ID gefunden. Kontaktiere den Support.', { status: 400 });
@@ -93,12 +74,12 @@ export default async function handler(req: Request) {
     });
 
   } catch (error) {
-    console.error('❌ Customer Portal Error:', error);
-    
+    console.error('Customer Portal Error:', error);
+
     const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
-    return new Response(JSON.stringify({ 
-      error: errorMessage 
-    }), { 
+    return new Response(JSON.stringify({
+      error: errorMessage
+    }), {
       status: 500,
       headers: {
         'Content-Type': 'application/json'

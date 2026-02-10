@@ -20,7 +20,7 @@ export default defineConfig({
           // Separate vendor chunks
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-tabs', '@radix-ui/react-progress', '@radix-ui/react-label', '@radix-ui/react-slot', '@radix-ui/react-alert-dialog'],
-          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-appwrite': ['appwrite'],
           'vendor-utils': ['lucide-react', 'sonner', 'class-variance-authority', 'clsx', 'tailwind-merge']
         },
         // Add hashing for long-term caching
@@ -37,7 +37,7 @@ export default defineConfig({
       'react',
       'react-dom',
       'react-router-dom',
-      '@supabase/supabase-js',
+      'appwrite',
       'sonner'
     ],
   },

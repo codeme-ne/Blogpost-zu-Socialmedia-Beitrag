@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSession, onAuthStateChange } from "@/api/supabase";
+import { getCurrentUser, onAuthStateChange } from "@/api/appwrite";
 import HowItWorks from "@/components/graphics/HowItWorks";
 import { DecorativeBackground } from "@/components/landing/DecorativeBackground";
 import { HeaderBar } from "@/components/landing/HeaderBar";
@@ -19,8 +19,8 @@ export default function Landing() {
 
   useEffect(() => {
     // Auto-redirect if already logged in
-    getSession().then(({ data }) => {
-      if (data.session) navigate("/app", { replace: true });
+    getCurrentUser().then((user) => {
+      if (user) navigate("/app", { replace: true });
       else setChecking(false);
     });
     const { data: sub } = onAuthStateChange((_event, session) => {

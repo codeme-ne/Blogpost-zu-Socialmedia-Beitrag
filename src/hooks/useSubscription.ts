@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getSupabaseClient } from '../api/supabase';
+import { querySubscription } from '@/api/appwrite';
 import { createCustomerPortal } from '../libs/api-client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import config from '@/config/app.config';
-
-const supabase = getSupabaseClient();
 
 // Simple in-memory cache to prevent redundant queries (5 components = 1 query)
 const subscriptionCache: {
@@ -66,30 +64,18 @@ export function useSubscription() {
         return;
       }
 
-      // Fetch fresh data from Supabase
-      const { data, error: fetchError } = await supabase
-        .from('subscriptions')
-        .select('id, user_id, stripe_customer_id, stripe_subscription_id, status, is_active, interval, amount, currency, current_period_end')
-        .eq('user_id', user.id)
-        .single();
+      // Fetch fresh data from Appwrite
+      const { data, error: fetchError } = await querySubscription(user.id);
 
       if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
-          // No subscription found - user is not premium
-          subscriptionCache.data = null;
-          subscriptionCache.timestamp = now;
-          subscriptionCache.userId = user.id;
-          setSubscription(null);
-        } else {
-          throw fetchError;
-        }
-      } else {
-        // Update cache with fresh data
-        subscriptionCache.data = data;
-        subscriptionCache.timestamp = now;
-        subscriptionCache.userId = user.id;
-        setSubscription(data);
+        throw fetchError;
       }
+
+      // Update cache with fresh data
+      subscriptionCache.data = data as Subscription | null;
+      subscriptionCache.timestamp = now;
+      subscriptionCache.userId = user.id;
+      setSubscription(data as Subscription | null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Fehler beim Laden der Subscription';
       setError(errorMessage);
@@ -107,19 +93,19 @@ export function useSubscription() {
 
   const openCustomerPortal = async () => {
     if (!subscription?.stripe_customer_id) {
-      toast.error('Kein Customer Portal verfügbar. Du hast noch kein aktives Abo.');
+      toast.error('Kein Customer Portal verfuegbar. Du hast noch kein aktives Abo.');
       return;
     }
 
     try {
       const returnUrl = window.location.origin + '/settings';
       const { url } = await createCustomerPortal(returnUrl);
-      
+
       // Open in same window to maintain session
       window.location.href = url;
     } catch (error) {
       console.error('Customer portal error:', error);
-      toast.error('Customer Portal konnte nicht geöffnet werden. Versuche es später erneut.');
+      toast.error('Customer Portal konnte nicht geoeffnet werden. Versuche es spaeter erneut.');
     }
   };
 
@@ -128,20 +114,18 @@ export function useSubscription() {
   const isActive = hasAccess; // Alias for compatibility
   const isPro = hasAccess; // Alias for compatibility
   const isYearly = subscription?.interval === 'yearly';
-  
+
   // Simplified status checks
   const isTrial = subscription?.status === 'trial';
   const isPastDue = subscription?.status === 'past_due';
   const isCanceled = subscription?.status === 'canceled';
 
   // Billing period info (simplified)
-  const currentPeriodEnd = subscription?.current_period_end 
+  const currentPeriodEnd = subscription?.current_period_end
     ? new Date(subscription.current_period_end)
     : null;
 
   useEffect(() => {
-    // Fetch subscription whenever user changes
-    // The AuthContext already handles auth state changes
     fetchSubscription();
   }, [fetchSubscription]);
 
@@ -175,7 +159,6 @@ export function useSubscription() {
       }
     }
 
-    // Run cleanup in idle time to avoid blocking UI
     if ('requestIdleCallback' in window) {
       requestIdleCallback(cleanup)
     } else {

@@ -42,7 +42,7 @@ import { perfMonitor, PERF_MARKS, PERF_MEASURES } from "@/utils/performance";
 // Types
 import type { Platform } from "@/config/platforms";
 import { PLATFORM_LABEL } from "@/config/platforms";
-import { savePost, getSession } from "@/api/supabase";
+import { savePost } from "@/api/appwrite";
 import { createLinkedInShareUrl } from "@/api/linkedin";
 
 import { MobileBottomSheet, useMobileBottomSheet } from "@/components/mobile/MobileBottomSheet";
@@ -309,8 +309,9 @@ export default function GeneratorV2() {
                                       text=""
                                       onClick={async () => {
                                         try {
-                                          // Get auth token from Supabase session (not localStorage)
-                                          const { data: { session } } = await getSession();
+                                          // Get auth token from Appwrite
+                                          const { createJWT } = await import('@/api/appwrite');
+                                          const jwt = await createJWT();
 
                                           // Call our secure backend endpoint instead of exposing credentials
                                           const response = await fetch('/api/share/linkedin', {
@@ -318,8 +319,8 @@ export default function GeneratorV2() {
                                             headers: {
                                               'Content-Type': 'application/json',
                                               // Optional: Add auth token if user is logged in
-                                              ...(session?.access_token ? {
-                                                'Authorization': `Bearer ${session.access_token}`
+                                              ...(jwt ? {
+                                                'Authorization': `Bearer ${jwt}`
                                               } : {})
                                             },
                                             body: JSON.stringify({ content: postContent })

@@ -1,12 +1,9 @@
 import { useState } from 'react'
-import { signInWithEmail, signUpWithPassword, signInWithPassword, resetPasswordForEmail } from '@/api/supabase'
+import { signInWithEmail, signUpWithPassword, signInWithPassword, resetPasswordForEmail, createJWT } from '@/api/appwrite'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
-import { getSupabaseClient } from '@/api/supabase'
-
-const supabase = getSupabaseClient()
 
 type AuthMode = 'login' | 'register' | 'magic-link'
 
@@ -19,22 +16,21 @@ export function Auth() {
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
   const [authMode, setAuthMode] = useState<AuthMode>('login')
 
-  // Safely reconcile pending subscription on the server (service role)
-  // Instead of writing from the client (RLS-safe and avoids duplication)
-  const checkPendingSubscription = async (_userEmail: string, _userId: string) => {
+  // Safely reconcile pending subscription on the server
+  const checkPendingSubscription = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      const jwt = await createJWT()
+      if (!jwt) return
 
       const resp = await fetch('/api/reconcile-subscription', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${jwt}` },
       })
       const json = await resp.json().catch(() => ({})) as { activated?: number }
       if (json?.activated) {
-        toast.success('🎉 Ihr Pro-Abo wurde aktiviert! - Sie haben jetzt Zugang zu allen Pro-Features.')
+        toast.success('Ihr Pro-Abo wurde aktiviert! - Sie haben jetzt Zugang zu allen Pro-Features.')
       }
-    } catch (err) {
+    } catch {
       // Silent failure for subscription reconciliation
     }
   }
@@ -43,14 +39,14 @@ export function Auth() {
     e.preventDefault()
     if (!email || !password) return
 
-    // Bei Registrierung Passwörter prüfen
+    // Bei Registrierung Passwoerter pruefen
     if (authMode === 'register') {
       if (password.length < 6) {
         toast.error('Passwort zu kurz - Das Passwort muss mindestens 6 Zeichen lang sein.')
         return
       }
       if (password !== passwordConfirm) {
-        toast.error('Passwörter stimmen nicht überein - Bitte stelle sicher, dass beide Passwörter identisch sind.')
+        toast.error('Passwoerter stimmen nicht ueberein - Bitte stelle sicher, dass beide Passwoerter identisch sind.')
         return
       }
     }
@@ -60,47 +56,28 @@ export function Auth() {
       if (authMode === 'register') {
         const { error, data } = await signUpWithPassword(email, password)
         if (error) {
-          // Spezielle Behandlung für verschiedene Fehlertypen
-          if (error.message?.includes('User already registered')) {
+          const errorMsg = error?.message || String(error)
+          if (errorMsg.includes('already') || errorMsg.includes('exist')) {
             toast.error('E-Mail bereits registriert - Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich an oder verwende eine andere E-Mail.')
           } else {
             throw error
           }
-        } else if (data?.user && !data.session) {
-          // User wurde erstellt, aber noch nicht bestätigt (email confirmation enabled)
-          toast.success('Registrierung erfolgreich! 📧 - Bitte prüfe deine E-Mail und klicke auf den Bestätigungslink, um deinen Account zu aktivieren.')
-          // Form zurücksetzen
-          setEmail('')
-          setPassword('')
-          setPasswordConfirm('')
-          setAuthMode('login')
         } else if (data?.session) {
-          // User wurde erstellt und ist bereits eingeloggt (email confirmation disabled)
           toast.success('Registrierung erfolgreich! - Du wirst automatisch weitergeleitet...')
-          
-          // Check for pending subscription
-          if (data.user) {
-            await checkPendingSubscription(email, data.user.id)
-          }
+          await checkPendingSubscription()
         }
       } else {
         const { error, data } = await signInWithPassword(email, password)
         if (error) {
-          // Spezielle Fehlerbehandlung für Login
-          if (error.message?.includes('Invalid login credentials')) {
-            toast.error('Anmeldung fehlgeschlagen - E-Mail oder Passwort ist falsch. Bitte überprüfe deine Eingaben.')
-          } else if (error.message?.includes('Email not confirmed')) {
-            toast.error('E-Mail nicht bestätigt - Bitte bestätige deine E-Mail-Adresse über den Link in der Bestätigungs-E-Mail.')
+          const errorMsg = error?.message || String(error)
+          if (errorMsg.includes('Invalid') || errorMsg.includes('credentials') || errorMsg.includes('password')) {
+            toast.error('Anmeldung fehlgeschlagen - E-Mail oder Passwort ist falsch. Bitte ueberpruefe deine Eingaben.')
           } else {
             throw error
           }
         } else if (data?.session) {
           toast.success('Erfolgreich angemeldet! - Du wirst weitergeleitet...')
-          
-          // Check for pending subscription on login too
-          if (data.user) {
-            await checkPendingSubscription(data.user.email || email, data.user.id)
-          }
+          await checkPendingSubscription()
         }
       }
     } catch (err) {
@@ -113,12 +90,12 @@ export function Auth() {
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return
-    
+
     setLoading(true)
     try {
       const { error } = await signInWithEmail(email)
       if (error) throw error
-      toast.success('Magic Link gesendet - Bitte prüfe deine E-Mail, um dich einzuloggen.')
+      toast.success('Magic Link gesendet - Bitte pruefe deine E-Mail, um dich einzuloggen.')
     } catch (err) {
       toast.error(`Login fehlgeschlagen - ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -186,7 +163,7 @@ export function Auth() {
             {loading ? 'Sende Link...' : 'Magic Link senden'}
           </Button>
           <p className="text-xs text-center text-muted-foreground">
-            Du erhältst einen Login-Link per E-Mail
+            Du erhaeltst einen Login-Link per E-Mail
           </p>
         </form>
       ) : (
@@ -230,7 +207,7 @@ export function Auth() {
 
           {authMode === 'register' && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Passwort bestätigen</label>
+              <label className="text-sm font-medium">Passwort bestaetigen</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -252,9 +229,9 @@ export function Auth() {
             </div>
           )}
 
-          <Button 
-            type="submit" 
-            disabled={loading || !email || !password || (authMode === 'register' && !passwordConfirm)} 
+          <Button
+            type="submit"
+            disabled={loading || !email || !password || (authMode === 'register' && !passwordConfirm)}
             className="w-full"
           >
             {loading ? (
@@ -266,18 +243,18 @@ export function Auth() {
 
           {authMode === 'login' && (
             <p className="text-xs text-center text-muted-foreground">
-              <button 
+              <button
                 type="button"
                 className="underline hover:text-foreground transition-colors"
                 onClick={async () => {
                   if (!email) {
-                    toast.error('E-Mail erforderlich - Bitte gib deine E-Mail-Adresse ein, um dein Passwort zurückzusetzen.')
+                    toast.error('E-Mail erforderlich - Bitte gib deine E-Mail-Adresse ein, um dein Passwort zurueckzusetzen.')
                     return
                   }
                   try {
                     const { error } = await resetPasswordForEmail(email)
                     if (error) throw error
-                    toast.success('E-Mail gesendet! - Prüfe deine E-Mail für den Link zum Zurücksetzen des Passworts.')
+                    toast.success('E-Mail gesendet! - Pruefe deine E-Mail fuer den Link zum Zuruecksetzen des Passworts.')
                   } catch (err) {
                     toast.error(`Fehler - ${err instanceof Error ? err.message : 'Passwort-Reset fehlgeschlagen'}`)
                   }

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ButtonHTMLAttributes, ReactNode, useState, useEffect, useRef } from "react";
-import { getSupabaseClient } from "@/api/supabase";
+import { getCurrentUser } from "@/api/appwrite";
 import { cn } from "@/lib/utils";
 import { Check, Loader2, Sparkles, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
@@ -127,8 +127,7 @@ export function UpgradeButton({
     try {
       // Enrich payment link with user context (helps webhook link user quickly)
       const url = new URL(baseLink);
-      const sb = getSupabaseClient();
-      const { data: { user } } = await sb.auth.getUser();
+      const user = await getCurrentUser();
 
       if (user?.id) url.searchParams.set('client_reference_id', user.id);
       if (user?.email) url.searchParams.set('prefilled_email', user.email);

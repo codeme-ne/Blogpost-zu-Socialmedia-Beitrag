@@ -1,5 +1,5 @@
 import { useEffect, useState, memo } from 'react'
-import { SavedPost, getSavedPosts, deleteSavedPost, updateSavedPost } from '@/api/supabase'
+import { SavedPost, getSavedPosts, deleteSavedPost, updateSavedPost } from '@/api/appwrite'
 import { SaveButton, EditButton, DeleteButton, LinkedInShareButton, XShareButton, InstagramShareButton } from '@/design-system/components/ActionButtons'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -28,10 +28,10 @@ interface SavedPostsProps {
 
 interface PostCardProps {
   post: SavedPost;
-  editingPost: { id: number; content: string } | null;
-  onEdit: (id: number, content: string) => void;
-  onDelete: (id: number) => void;
-  onStartEdit: (id: number, content: string) => void;
+  editingPost: { id: string; content: string } | null;
+  onEdit: (id: string, content: string) => void;
+  onDelete: (id: string) => void;
+  onStartEdit: (id: string, content: string) => void;
   onCancelEdit: () => void;
   onEditContentChange: (content: string) => void;
 }
@@ -142,7 +142,7 @@ const PostCard = memo(({ post, editingPost, onEdit, onDelete, onStartEdit, onCan
 const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuthenticated, onLoginClick, initialExpanded, inline }: SavedPostsProps) {
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([])
   const [isCollapsed, setIsCollapsed] = useState(!initialExpanded)
-  const [editingPost, setEditingPost] = useState<{ id: number, content: string } | null>(null)
+  const [editingPost, setEditingPost] = useState<{ id: string, content: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -176,7 +176,7 @@ const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuth
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
       await deleteSavedPost(id)
       setSavedPosts(posts => posts.filter(p => p.id !== id))
@@ -185,7 +185,7 @@ const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuth
     }
   }
 
-  const handleEdit = async (id: number, newContent: string) => {
+  const handleEdit = async (id: string, newContent: string) => {
     try {
       await updateSavedPost(id, newContent)
       setSavedPosts(posts => posts.map(p =>

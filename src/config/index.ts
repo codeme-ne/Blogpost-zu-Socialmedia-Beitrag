@@ -24,7 +24,7 @@ export {
   isDevelopment,
   isProduction,
   getStripePaymentLinks,
-  getSupabaseConfig,
+  getAppwriteConfig,
   getLinkedInConfig,
   getClaudeConfig,
   getAppUrls,

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
 import { Button } from "@/components/ui/button";
 import { useSubscription } from "@/hooks/useSubscription";
-import { getSession, signOut } from "@/api/supabase";
+import { getSession, signOut } from "@/api/appwrite";
 import { toast } from "sonner";
 import { 
   CreditCard, 
@@ -33,7 +33,7 @@ export function AccountButton({ className }: AccountButtonProps) {
     if (!email) {
       try {
         const { data } = await getSession();
-        if (data.session?.user.email) {
+        if (data?.session?.user?.email) {
           setEmail(data.session.user.email);
         }
       } catch (error) {

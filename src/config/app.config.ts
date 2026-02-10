@@ -1,6 +1,6 @@
 /**
  * Central App Configuration for Social Transformer
- * Based on Ship Fast patterns, adapted for German SaaS with Supabase
+ * Based on Ship Fast patterns, adapted for German SaaS with Appwrite
  */
 
 export interface StripePlan {
@@ -297,12 +297,12 @@ export function formatPrice(amount: number, currency: string = 'EUR'): string {
  */
 export function validateEnvironment(): { isValid: boolean; missing: string[] } {
   const requiredVars = [
-    'VITE_SUPABASE_URL',
-    'VITE_SUPABASE_ANON_KEY'
+    'VITE_APPWRITE_ENDPOINT',
+    'VITE_APPWRITE_PROJECT_ID'
   ];
-  
+
   const missing = requiredVars.filter(varName => !import.meta.env[varName]);
-  
+
   return {
     isValid: missing.length === 0,
     missing
@@ -314,12 +314,10 @@ export function validateEnvironment(): { isValid: boolean; missing: string[] } {
  */
 export function getEnvironmentConfig() {
   return {
-    supabase: {
-      url: import.meta.env.VITE_SUPABASE_URL,
-      anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY
+    appwrite: {
+      endpoint: import.meta.env.VITE_APPWRITE_ENDPOINT,
+      projectId: import.meta.env.VITE_APPWRITE_PROJECT_ID
     },
-    // Claude API is server-side only for security
-    // Client uses proxy route /api/claude instead
     stripe: {
       paymentLinks: {
         yearly: import.meta.env.VITE_STRIPE_PAYMENT_LINK_YEARLY,
@@ -327,8 +325,6 @@ export function getEnvironmentConfig() {
         legacy: import.meta.env.VITE_STRIPE_PAYMENT_LINK
       }
     },
-    // LinkedIn credentials removed from client-side config for security
-    // Server-side API at /api/share/linkedin.ts uses LINKEDIN_ACCESS_TOKEN (without VITE_ prefix)
     tracking: {
       opikApiKey: import.meta.env.VITE_OPIK_API_KEY
     }

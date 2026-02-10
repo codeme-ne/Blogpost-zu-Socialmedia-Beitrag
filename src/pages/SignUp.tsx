@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Auth } from "@/components/common/Auth";
-import { getSession, onAuthStateChange } from "@/api/supabase";
+import { getCurrentUser, onAuthStateChange } from "@/api/appwrite";
 import { HeaderBarSignUp } from "@/components/landing/HeaderBarSignUp";
 
 export default function SignUp() {
@@ -11,8 +11,8 @@ export default function SignUp() {
 
   useEffect(() => {
     // Auto-redirect if already logged in
-    getSession().then(({ data }) => {
-      if (data.session) navigate("/app", { replace: true });
+    getCurrentUser().then((user) => {
+      if (user) navigate("/app", { replace: true });
       else setChecking(false);
     });
   const { data: sub } = onAuthStateChange(async (_event, session) => {

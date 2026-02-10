@@ -1,283 +1,94 @@
-/**
- * Environment Configuration Utilities
- * Ship Fast pattern for type-safe environment handling
- */
+import { z } from 'zod';
 
-export interface EnvironmentVariables {
-  // Supabase (required)
-  VITE_SUPABASE_URL: string;
-  VITE_SUPABASE_ANON_KEY: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
-  
-  // Claude AI (server-side only for security)
-  CLAUDE_API_KEY?: string;
-  
-  // Stripe (payment links)
-  VITE_STRIPE_PAYMENT_LINK?: string;
-  VITE_STRIPE_PAYMENT_LINK_YEARLY?: string;
-  VITE_STRIPE_PAYMENT_LINK_MONTHLY?: string;
-  STRIPE_WEBHOOK_SECRET?: string;
-  STRIPE_SECRET_KEY?: string;
-  
-  // LinkedIn (server-side only for security, no VITE_ prefix)
-  LINKEDIN_ACCESS_TOKEN?: string;
-  LINKEDIN_AUTHOR_URN?: string;
+// Schema for client-side environment variables (VITE_ prefixed)
+const clientSchema = z.object({
+  VITE_APPWRITE_ENDPOINT: z.string().url({ message: 'VITE_APPWRITE_ENDPOINT must be a valid URL' }),
+  VITE_APPWRITE_PROJECT_ID: z.string().min(1, { message: 'VITE_APPWRITE_PROJECT_ID is required' }),
+  VITE_BASE_URL: z.string().url().optional(),
+  VITE_DOMAIN_NAME: z.string().optional(),
+  // Stripe payment links - make them optional for development
+  VITE_STRIPE_PAYMENT_LINK: z.string().url().optional(),
+  VITE_STRIPE_PAYMENT_LINK_YEARLY: z.string().url().optional(),
+  VITE_STRIPE_PAYMENT_LINK_MONTHLY: z.string().url().optional(),
+});
 
-  // App configuration
-  VITE_DOMAIN_NAME?: string;
-  VITE_BASE_URL?: string;
-  VITE_SITE_URL?: string;
-  VITE_SUPPORT_EMAIL?: string;
-  VITE_APP_VERSION?: string;
-  
-  // Tracking (optional)
-  VITE_OPIK_API_KEY?: string;
-}
+// Schema for server-side environment variables (for Edge functions)
+const serverSchema = z.object({
+  // Required for core functionality
+  CLAUDE_API_KEY: z.string().min(1, { message: 'CLAUDE_API_KEY is required for content generation' }),
+  STRIPE_SECRET_KEY: z.string().startsWith('sk_', { message: 'STRIPE_SECRET_KEY must start with sk_' }),
+  STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_', { message: 'STRIPE_WEBHOOK_SECRET must start with whsec_' }),
 
-export interface EnvironmentValidationResult {
-  isValid: boolean;
-  missing: string[];
-  warnings: string[];
-}
+  // Appwrite server-side
+  APPWRITE_ENDPOINT: z.string().url({ message: 'APPWRITE_ENDPOINT must be a valid URL' }),
+  APPWRITE_PROJECT_ID: z.string().min(1, { message: 'APPWRITE_PROJECT_ID is required' }),
+  APPWRITE_API_KEY: z.string().min(1, { message: 'APPWRITE_API_KEY is required' }),
 
-/**
- * Required environment variables for basic functionality
- */
-const REQUIRED_CLIENT_VARS: (keyof EnvironmentVariables)[] = [
-  'VITE_SUPABASE_URL',
-  'VITE_SUPABASE_ANON_KEY'
-];
+  // Optional services
+  FIRECRAWL_API_KEY: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
 
-/**
- * Required environment variables for server-side functionality
- */
-const REQUIRED_SERVER_VARS: (keyof EnvironmentVariables)[] = [
-  'CLAUDE_API_KEY',
-  'STRIPE_WEBHOOK_SECRET',
-  'SUPABASE_SERVICE_ROLE_KEY'
-];
+  // LinkedIn (optional, server-side only)
+  LINKEDIN_ACCESS_TOKEN: z.string().optional(),
+  LINKEDIN_AUTHOR_URN: z.string().optional(),
+});
 
-/**
- * Optional but recommended environment variables
- */
-const RECOMMENDED_VARS: (keyof EnvironmentVariables)[] = [
-  'VITE_STRIPE_PAYMENT_LINK_YEARLY',
-  'VITE_STRIPE_PAYMENT_LINK_MONTHLY'
-];
-
-/**
- * Validate client-side environment variables
- */
-export function validateClientEnvironment(): EnvironmentValidationResult {
-  const missing = REQUIRED_CLIENT_VARS.filter(varName => !getEnvVar(varName));
-  const warnings = RECOMMENDED_VARS.filter(varName => !getEnvVar(varName));
-  
-  return {
-    isValid: missing.length === 0,
-    missing,
-    warnings
-  };
-}
-
-/**
- * Validate server-side environment variables (Node.js)
- */
-export function validateServerEnvironment(): EnvironmentValidationResult {
-  if (typeof process === 'undefined') {
-    return { isValid: false, missing: ['Node.js environment required'], warnings: [] };
-  }
-  
-  const missing = REQUIRED_SERVER_VARS.filter(varName => !process.env[varName]);
-  const warnings: string[] = [];
-  
-  return {
-    isValid: missing.length === 0,
-    missing,
-    warnings
-  };
-}
-
-/**
- * Get environment variable (works in both client and server)
- */
-export function getEnvVar(varName: keyof EnvironmentVariables): string | undefined {
-  // Client-side (Vite)
-  if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const viteEnv = (import.meta as any)?.env;
-    if (viteEnv) {
-      return viteEnv[varName];
+// Validate client environment (called in client-side code)
+export function validateClientEnvironment() {
+  try {
+    const env = clientSchema.parse(import.meta.env);
+    return { success: true, env };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.issues.map((err: any) => `${err.path.join('.')}: ${err.message}`).join('\n');
+      console.error('Environment validation failed (client):\n', errors);
+      return {
+        success: false,
+        error: `Client environment validation failed:\n${errors}`,
+        env: null
+      };
     }
+    throw error;
   }
-  
-  // Server-side (Node.js)
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[varName];
-  }
-  
-  return undefined;
 }
 
-/**
- * Get environment variable with fallback
- */
-export function getEnvVarWithFallback(
-  varName: keyof EnvironmentVariables, 
-  fallback: string
-): string {
-  return getEnvVar(varName) || fallback;
-}
-
-/**
- * Check if we're in development mode
- */
-export function isDevelopment(): boolean {
-  return (
-    getEnvVar('NODE_ENV' as keyof EnvironmentVariables) === 'development' ||
-    (import.meta && import.meta.env && import.meta.env.DEV)
-  );
-}
-
-/**
- * Check if we're in production mode
- */
-export function isProduction(): boolean {
-  return (
-    getEnvVar('NODE_ENV' as keyof EnvironmentVariables) === 'production' ||
-    (import.meta && import.meta.env && import.meta.env.PROD)
-  );
-}
-
-/**
- * Get all Stripe payment links
- */
-export function getStripePaymentLinks() {
-  return {
-    yearly: getEnvVar('VITE_STRIPE_PAYMENT_LINK_YEARLY'),
-    monthly: getEnvVar('VITE_STRIPE_PAYMENT_LINK_MONTHLY'),
-    legacy: getEnvVar('VITE_STRIPE_PAYMENT_LINK') // fallback
-  };
-}
-
-/**
- * Get Supabase configuration
- */
-export function getSupabaseConfig() {
-  return {
-    url: getEnvVar('VITE_SUPABASE_URL'),
-    anonKey: getEnvVar('VITE_SUPABASE_ANON_KEY'),
-    serviceRoleKey: getEnvVar('SUPABASE_SERVICE_ROLE_KEY') // server-side only
-  };
-}
-
-/**
- * Get LinkedIn configuration (server-side only)
- * Client should call /api/share/linkedin which handles credentials securely
- */
-export function getLinkedInConfig() {
-  // Only available server-side (without VITE_ prefix)
-  if (typeof process !== 'undefined' && process.env) {
-    return {
-      accessToken: process.env.LINKEDIN_ACCESS_TOKEN,
-      authorUrn: process.env.LINKEDIN_AUTHOR_URN,
-      isEnabled: !!(process.env.LINKEDIN_ACCESS_TOKEN && process.env.LINKEDIN_AUTHOR_URN)
-    };
-  }
-
-  // Client-side: credentials not available (security)
-  return {
-    accessToken: undefined,
-    authorUrn: undefined,
-    isEnabled: false
-  };
-}
-
-/**
- * Get Claude AI configuration (server-side only for security)
- */
-export function getClaudeConfig() {
-  return {
-    serverApiKey: getEnvVar('CLAUDE_API_KEY'), // Server-side only
-    isConfigured: !!getEnvVar('CLAUDE_API_KEY')
-  };
-}
-
-/**
- * Get application URLs based on environment
- */
-export function getAppUrls() {
-  const baseUrl = getEnvVarWithFallback('VITE_BASE_URL',
-    isDevelopment() ? 'http://localhost:5173' : 'https://transformer.social'
-  );
-
-  return {
-    base: baseUrl,
-    app: `${baseUrl}/app`,
-    landing: baseUrl,
-    signup: `${baseUrl}/signup`,
-    settings: `${baseUrl}/settings`
-  };
-}
-
-/**
- * Get application configuration
- */
-export function getAppConfig() {
-  return {
-    supportEmail: getEnvVarWithFallback('VITE_SUPPORT_EMAIL', 'support@example.com'),
-    version: getEnvVarWithFallback('VITE_APP_VERSION', '1.0.0'),
-    domainName: getEnvVarWithFallback('VITE_DOMAIN_NAME', 'Social Transformer')
-  };
-}
-
-/**
- * Initialize and validate environment on startup
- */
-export function initializeEnvironment(): void {
-  const validation = validateClientEnvironment();
-  
-  if (!validation.isValid) {
-    const errorMessage = `Missing required environment variables: ${validation.missing.join(', ')}`;
-    
-    if (isDevelopment()) {
-      console.error('❌ Environment Validation Failed:', errorMessage);
-      console.error('Please check your .env file and ensure all required variables are set.');
+// Validate server environment (called in Edge functions)
+export function validateServerEnvironment() {
+  try {
+    const env = serverSchema.parse(process.env);
+    return { success: true, env };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.issues.map((err: any) => `${err.path.join('.')}: ${err.message}`).join('\n');
+      console.error('Environment validation failed (server):\n', errors);
+      return {
+        success: false,
+        error: `Server environment validation failed:\n${errors}`,
+        env: null
+      };
     }
-    
-    throw new Error(errorMessage);
-  }
-  
-  if (validation.warnings.length > 0 && isDevelopment()) {
-    console.warn('⚠️ Missing recommended environment variables:', validation.warnings.join(', '));
-  }
-  
-  if (isDevelopment()) {
-    console.log('✅ Environment validation passed');
+    throw error;
   }
 }
 
-/**
- * Export a typed interface for all environment access
- */
-export const env = {
-  // Getters
-  get: getEnvVar,
-  getWithFallback: getEnvVarWithFallback,
+// Get validated client environment (throws on validation failure)
+export function getClientEnv() {
+  const result = validateClientEnvironment();
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+  return result.env!;
+}
 
-  // Configuration objects
-  supabase: getSupabaseConfig(),
-  claude: getClaudeConfig(),
-  linkedin: getLinkedInConfig(),
-  stripe: getStripePaymentLinks(),
-  urls: getAppUrls(),
-  app: getAppConfig(),
+// Get validated server environment (throws on validation failure)
+export function getServerEnv() {
+  const result = validateServerEnvironment();
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+  return result.env!;
+}
 
-  // Environment checks
-  isDev: isDevelopment(),
-  isProd: isProduction(),
-
-  // Validation
-  validate: validateClientEnvironment,
-  validateServer: validateServerEnvironment,
-  init: initializeEnvironment
-} as const;
+// Type exports for TypeScript
+export type ClientEnv = z.infer<typeof clientSchema>;
+export type ServerEnv = z.infer<typeof serverSchema>;

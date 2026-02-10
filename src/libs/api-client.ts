@@ -1,7 +1,7 @@
 // Enhanced API client for Social Transformer
-// Based on Ship Fast patterns, adapted for Supabase auth and German UI
+// Based on Ship Fast patterns, adapted for Appwrite auth and German UI
 
-import { supabase } from '../api/supabase';
+import { createJWT, signOut } from '../api/appwrite';
 import { toast } from 'sonner';
 
 export interface ApiError {
@@ -63,12 +63,12 @@ export class ApiClient {
     // Add auth token if not skipped
     if (!skipAuth) {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          requestHeaders['Authorization'] = `Bearer ${session.access_token}`;
+        const jwt = await createJWT();
+        if (jwt) {
+          requestHeaders['Authorization'] = `Bearer ${jwt}`;
         }
       } catch (error) {
-        console.warn('Failed to get auth session:', error);
+        console.warn('Failed to get auth token:', error);
       }
     }
 
@@ -156,10 +156,10 @@ export class ApiClient {
       case 401:
         // Unauthorized - redirect to login
         toast.error('Anmeldung erforderlich. Du wirst zur Anmeldung weitergeleitet...');
-        
+
         // Sign out user and redirect to signup
         try {
-          await supabase.auth.signOut();
+          await signOut();
           window.location.href = '/signup';
         } catch (error) {
           console.error('Error signing out user:', error);
