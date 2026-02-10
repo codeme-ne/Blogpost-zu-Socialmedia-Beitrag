@@ -74,7 +74,7 @@ export default async function handler(req: Request) {
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err))
     console.error(`Webhook signature verification failed: ${error.message}`)
-    return new Response(`Webhook signature verification failed: ${error.message}`, { status: 400 })
+    return new Response('Webhook signature verification failed', { status: 400 })
   }
 
   const databases = getServerDatabases()
@@ -339,7 +339,7 @@ export default async function handler(req: Request) {
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
     console.error(`Webhook processing error for ${event.type}:`, err)
-    return new Response(`Webhook error: ${err.message}`, { status: 500 })
+    return new Response('Webhook processing error', { status: 500 })
   }
 
   return new Response(JSON.stringify({ received: true }), {

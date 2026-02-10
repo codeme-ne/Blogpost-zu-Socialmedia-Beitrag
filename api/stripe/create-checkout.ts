@@ -6,13 +6,15 @@ export const config = {
   runtime: 'edge',
 }
 
+let _stripe: Stripe | null = null
 function getStripe(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) throw new Error('Missing required env var: STRIPE_SECRET_KEY')
-  return new Stripe(key, { apiVersion: '2025-08-27.basil' })
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY
+    if (!key) throw new Error('Missing required env var: STRIPE_SECRET_KEY')
+    _stripe = new Stripe(key, { apiVersion: '2025-08-27.basil' })
+  }
+  return _stripe
 }
-
-const stripe = getStripe()
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
@@ -20,6 +22,8 @@ export default async function handler(req: Request) {
   }
 
   try {
+    const stripe = getStripe()
+
     const parseResult = await parseJsonSafely<{
       priceId?: string;
       mode?: 'payment' | 'subscription';

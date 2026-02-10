@@ -1,11 +1,25 @@
 import { verifyJWT, getServerDatabases, DB_ID, Query } from '../utils/appwrite.js'
+import { parseJsonSafely } from '../utils/safeJson.js'
 
 export const config = {
   runtime: 'edge',
 };
 
-interface RequestBody {
-  returnUrl: string;
+// Allowed origins for returnUrl to prevent open redirect
+const ALLOWED_ORIGINS = [
+  'https://linkedin-posts-one.vercel.app',
+  'https://transformer.social',
+  'http://localhost:5173',
+  'http://localhost:3001',
+];
+
+function isAllowedReturnUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ALLOWED_ORIGINS.some(origin => parsed.origin === origin);
+  } catch {
+    return false;
+  }
 }
 
 export default async function handler(req: Request) {
@@ -27,11 +41,28 @@ export default async function handler(req: Request) {
       return new Response('Ungueltiger Auth Token', { status: 401 });
     }
 
-    // Parse request body
-    const body: RequestBody = await req.json();
+    // Parse request body with size limit
+    const parseResult = await parseJsonSafely<{ returnUrl?: string }>(req, 10 * 1024);
 
-    if (!body.returnUrl) {
+    if (!parseResult.success) {
+      return new Response(
+        JSON.stringify({ error: parseResult.error }),
+        { status: parseResult.error.includes('too large') ? 413 : 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { returnUrl } = parseResult.data;
+
+    if (!returnUrl) {
       return new Response('Return URL ist erforderlich', { status: 400 });
+    }
+
+    // Validate returnUrl against allowed origins to prevent open redirect
+    if (!isAllowedReturnUrl(returnUrl)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid return URL' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
     // Get user's subscription with customerId
@@ -59,7 +90,7 @@ export default async function handler(req: Request) {
     // Create Stripe Customer Portal session
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: subscription.stripe_customer_id,
-      return_url: body.returnUrl,
+      return_url: returnUrl,
     });
 
     if (!portalSession.url) {
