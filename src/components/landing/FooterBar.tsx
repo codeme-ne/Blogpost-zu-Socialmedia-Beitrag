@@ -48,7 +48,7 @@ export function FooterBar() {
             />
             <p className="text-sm text-muted-foreground max-w-md">
               Verwandle Newsletter in virale Social-Media-Posts mit präzise optimierten 
-              Claude AI Prompts. Entwickelt und getestet mit Anthropic Console für 
+              OpenRouter Prompts. Entwickelt und getestet für 
               maximale Qualität und Konsistenz.
             </p>
             <div className="flex gap-3">
@@ -182,7 +182,7 @@ export function FooterBar() {
             © 2025 Social Transformer • Made with ❤️ in Germany
           </p>
           <p className="text-xs text-muted-foreground">
-            Powered by Claude AI • Content-Extraktion mit Jina & Firecrawl • Newsletter zu Social Media in Sekunden
+            Powered by OpenRouter AI • Content-Extraktion mit Jina & Firecrawl • Newsletter zu Social Media in Sekunden
           </p>
         </div>
 

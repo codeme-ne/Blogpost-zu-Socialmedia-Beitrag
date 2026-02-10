@@ -31,7 +31,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://vercel.live; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co https://api.anthropic.com https://api.stripe.com; img-src 'self' data: https:; media-src 'self' https:; frame-src https://js.stripe.com; font-src 'self' data:;"
+          "value": "default-src 'self'; script-src 'self' https://vercel.live; style-src 'self' 'unsafe-inline'; connect-src 'self' https://fra.cloud.appwrite.io wss://fra.cloud.appwrite.io https://api.stripe.com; img-src 'self' data: https:; media-src 'self' https:; frame-src https://js.stripe.com; font-src 'self' data:;"
         }
       ]
     }

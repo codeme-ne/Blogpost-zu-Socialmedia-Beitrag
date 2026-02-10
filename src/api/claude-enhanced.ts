@@ -4,7 +4,8 @@ import {
   type PostGenerationOptions,
   type PostGenerationResponse
 } from '@/libs/promptBuilder.v2';
-import { generateClaudeMessage } from '@/libs/api-client';
+import { generateOpenRouterMessage } from '@/libs/api-client';
+import { OPENROUTER_MODEL } from '@/config/ai';
 
 /**
  * Core generation logic shared by all platform-specific functions
@@ -13,8 +14,8 @@ import { generateClaudeMessage } from '@/libs/api-client';
 async function _generate(options: PostGenerationOptions, max_tokens: number): Promise<PostGenerationResponse> {
   const prompt = buildStructuredPostPrompt(options);
 
-  const response = await generateClaudeMessage({
-    model: 'claude-3-5-sonnet-20241022',
+  const response = await generateOpenRouterMessage({
+    model: OPENROUTER_MODEL,
     max_tokens,
     temperature: options.regenerationSeed ? Math.min(1.0, 0.8 + (options.regenerationSeed * 0.05)) : 0.7,
     messages: [

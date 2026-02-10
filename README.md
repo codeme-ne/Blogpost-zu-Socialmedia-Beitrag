@@ -34,7 +34,7 @@ https://github.com/user-attachments/assets/demo-video.mp4
 | **Smart URL Extraction** | Extract content from any URL using Jina Reader with automatic cleaning |
 | **Batched AI Processing** | Cost-optimized API calls - generates for all platforms in a single request |
 | **Voice & Tone Control** | Customize output style with configurable tone presets |
-| **Post Management** | Save, edit, and organize generated content with Supabase backend |
+| **Post Management** | Save, edit, and organize generated content with Appwrite backend |
 | **One-Click Sharing** | Share directly to social platforms or copy to clipboard |
 | **Freemium Model** | Free tier (3/day) with Pro subscriptions via Stripe |
 | **Mobile-First Design** | Responsive UI with bottom sheet navigation on mobile/tablet |
@@ -60,9 +60,9 @@ https://github.com/user-attachments/assets/demo-video.mp4
 │                         EDGE FUNCTIONS (Vercel)                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
-│  │ /api/claude  │  │ /api/extract │  │ /api/stripe  │  │ /api/share   │    │
-│  │   Proxy to   │  │ Jina Reader  │  │  Checkout    │  │  LinkedIn    │    │
-│  │  Claude AI   │  │  Extraction  │  │   Portal     │  │   Share      │    │
+│  │ /api/openrouter ││ /api/extract │  │ /api/stripe  │  │ /api/share   │    │
+│  │   Proxy to      ││ Jina Reader  │  │  Checkout    │  │  LinkedIn    │    │
+│  │   OpenRouter    ││  Extraction  │  │   Portal     │  │   Share      │    │
 │  └──────────────┘  └──────────────┘  │   Webhook    │  └──────────────┘    │
 │                                      └──────────────┘                       │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -70,9 +70,9 @@ https://github.com/user-attachments/assets/demo-video.mp4
                     ┌─────────────────┼─────────────────┐
                     ▼                 ▼                 ▼
           ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-          │   Claude AI  │  │   Supabase   │  │    Stripe    │
-          │  (Anthropic) │  │  PostgreSQL  │  │   Payments   │
-          │              │  │     Auth     │  │              │
+          │  OpenRouter  │  │   Appwrite   │  │    Stripe    │
+          │      AI      │  │  Auth + DB   │  │   Payments   │
+          │              │  │ Auth + DB    │  │              │
           └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
@@ -96,9 +96,9 @@ User Input → URL Extraction (optional) → AI Generation → Display → Save/
 | **Styling** | TailwindCSS 3.4, shadcn/ui, Radix | Accessible, composable components |
 | **State** | Custom hooks, React Context | Encapsulated business logic |
 | **Backend** | Vercel Edge Functions | Serverless API with low latency |
-| **Database** | Supabase (PostgreSQL) | RLS-enabled data storage |
-| **Auth** | Supabase Auth | Magic link authentication |
-| **AI** | Claude 3.5 Sonnet | Content transformation |
+| **Database** | Appwrite Cloud | Managed database + document permissions |
+| **Auth** | Appwrite Auth | Magic link authentication |
+| **AI** | OpenRouter | Content transformation |
 | **Payments** | Stripe | Subscription management |
 | **Testing** | Vitest, Testing Library | Unit tests with 29 test cases |
 | **CI/CD** | GitHub Actions | Automated lint, type-check, test, deploy |
@@ -111,8 +111,8 @@ User Input → URL Extraction (optional) → AI Generation → Display → Save/
 
 - Node.js 20+
 - npm or yarn
-- Supabase account
-- Anthropic API key
+- Appwrite account
+- OpenRouter API key
 
 ### Installation
 
@@ -135,20 +135,28 @@ npm run dev:full
 ### Environment Variables
 
 ```env
-# Required - Supabase
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# Required - Appwrite (client)
+VITE_APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
+VITE_APPWRITE_PROJECT_ID=your-project-id
+
+# Required - Appwrite (server)
+APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
+APPWRITE_PROJECT_ID=your-project-id
+APPWRITE_API_KEY=standard_your-api-key
 
 # Required - AI
-CLAUDE_API_KEY=sk-ant-api03-...
+OPENROUTER_API_KEY=sk-or-v1-...
 
 # Required - Payments
 STRIPE_SECRET_KEY=sk_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-VITE_STRIPE_MONTHLY_PRICE_ID=price_...
-VITE_STRIPE_YEARLY_PRICE_ID=price_...
+VITE_STRIPE_PAYMENT_LINK_MONTHLY=https://buy.stripe.com/...
+VITE_STRIPE_PAYMENT_LINK_YEARLY=https://buy.stripe.com/...
 ```
+
+### Appwrite MCP
+
+If you want to manage Appwrite resources via an MCP-enabled IDE/LLM, see `docs/Appwrite-MCP.md`.
 
 ---
 
@@ -158,7 +166,7 @@ VITE_STRIPE_YEARLY_PRICE_ID=price_...
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev:full` | Start frontend (5173) + API (3001) |
+| `npm run dev:full` | Start frontend (5173) + API (3010) |
 | `npm run build` | TypeScript + Vite production build |
 | `npm run test` | Run Vitest in watch mode |
 | `npm run test:coverage` | Generate coverage report |
@@ -169,7 +177,7 @@ VITE_STRIPE_YEARLY_PRICE_ID=price_...
 
 ```
 src/
-├── api/           # API client wrappers (claude, extract, supabase)
+├── api/           # API client wrappers (openrouter, extract, appwrite)
 ├── components/    # UI components (shadcn/ui based)
 │   ├── ui/        # Base components (Button, Card, Dialog...)
 │   ├── common/    # Shared components (UrlExtractor, PlatformSelector)
@@ -186,7 +194,7 @@ src/
 └── test/          # Test files
 
 api/               # Vercel Edge Functions
-├── claude/        # Claude AI proxy
+├── openrouter/    # OpenRouter AI proxy
 ├── stripe/        # Payment endpoints
 └── extract.ts     # URL extraction
 ```
@@ -226,12 +234,12 @@ const hasUsageRemaining = () => {
 
 ### Edge Function Security
 
-Claude API key never exposed to client - all requests proxied through edge:
+OpenRouter API key never exposed to client - all requests proxied through edge:
 
 ```typescript
-// api/claude/v1/messages.ts
+// api/openrouter/v1/chat.ts
 export const config = { runtime: 'edge' }
-// Uses CLAUDE_API_KEY from server environment
+// Uses OPENROUTER_API_KEY from server environment
 ```
 
 ---
@@ -280,7 +288,7 @@ CI/CD pipeline includes:
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/api/claude/v1/messages` | POST | Bearer | Claude AI proxy |
+| `/api/openrouter/v1/chat` | POST | Bearer | OpenRouter AI proxy |
 | `/api/extract` | POST | - | URL content extraction |
 | `/api/stripe/create-checkout` | POST | Bearer | Stripe checkout session |
 | `/api/stripe/create-portal` | POST | Bearer | Customer portal link |
@@ -305,7 +313,7 @@ Private repository - All rights reserved.
 
 <div align="center">
 
-Built with React 19 · TypeScript · Vercel Edge · Claude AI
+Built with React 19 · TypeScript · Vercel Edge · OpenRouter
 
 **[View Live Demo →](https://linkedin-posts-one.vercel.app/)**
 

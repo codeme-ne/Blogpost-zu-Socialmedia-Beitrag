@@ -36,13 +36,13 @@ const hasPremiumExtraction = isFeatureEnabled('premiumExtraction');
 
 **Key Functions:**
 ```typescript
-import { env, getSupabaseConfig, isDevelopment } from '@/config/env.config';
+import { env, getAppwriteConfig, isDevelopment } from '@/config';
 
 // Type-safe environment access (server-side only)
-const apiKey = env.get('CLAUDE_API_KEY');
+const apiKey = env.get('OPENROUTER_API_KEY');
 
 // Service-specific configuration
-const supabase = env.supabase;
+const appwrite = getAppwriteConfig();
 
 // Environment checks
 if (env.isDev) {
@@ -141,7 +141,7 @@ The system validates these environment variables:
 - `VITE_SUPABASE_ANON_KEY`
 
 **Required (Server):**
-- `CLAUDE_API_KEY`
+- `OPENROUTER_API_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `SUPABASE_SERVICE_ROLE_KEY`
 

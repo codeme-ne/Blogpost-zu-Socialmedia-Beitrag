@@ -34,7 +34,7 @@ const HowItWorksGraphic: React.FC = () => {
     {
       id: 4,
       title: "Multiple Posts generiert",
-      description: "Claude AI erstellt mehrere optimierte Post-Varianten für dich",
+      description: "OpenRouter AI erstellt mehrere optimierte Post-Varianten für dich",
       image: "https://pw-bunny.b-cdn.net/Linkedin-Posts-Landing/4-multiple-posts-erstellt.jpg",
       color: "from-green-500/10 to-green-600/10",
       borderColor: "border-green-500/20"

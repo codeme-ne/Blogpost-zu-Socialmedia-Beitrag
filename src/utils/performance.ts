@@ -125,8 +125,9 @@ class PerformanceMonitor {
    */
   public sendToAnalytics(name: string, value: number): void {
     // Send to your analytics service
-    if (typeof window !== 'undefined' && (window as any).analytics) {
-      (window as any).analytics.track('Performance Metric', {
+    const win = window as unknown as Record<string, unknown>;
+    if (typeof window !== 'undefined' && win.analytics) {
+      (win.analytics as { track: (name: string, data: unknown) => void }).track('Performance Metric', {
         metric: name,
         value,
         timestamp: Date.now(),
@@ -134,8 +135,8 @@ class PerformanceMonitor {
     }
 
     // Google Analytics (if available)
-    if (typeof window !== 'undefined' && (window as any).gtag) {
-      (window as any).gtag('event', 'timing_complete', {
+    if (typeof window !== 'undefined' && win.gtag) {
+      (win.gtag as (...args: unknown[]) => void)('event', 'timing_complete', {
         name,
         value: Math.round(value),
         event_category: 'Performance',
@@ -174,9 +175,10 @@ class PerformanceMonitor {
     // First Input Delay
     const fidObserver = new PerformanceObserver((list) => {
       const entries = list.getEntries();
-      entries.forEach((entry: any) => {
+      entries.forEach((entry: PerformanceEntry) => {
         if ('processingStart' in entry) {
-          const fid = entry.processingStart - entry.startTime;
+          const fidEntry = entry as PerformanceEntry & { processingStart: number }
+          const fid = fidEntry.processingStart - fidEntry.startTime;
           this.metrics.set('fid', fid);
           this.sendToAnalytics('FID', fid);
         }

@@ -97,7 +97,7 @@ export async function createCheckoutSession(params: CreateCheckoutSessionParams)
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-    const extraParams: Record<string, any> = {};
+    const extraParams: Record<string, unknown> = {};
 
     // Handle existing customer or create new one
     if (params.user?.customerId) {

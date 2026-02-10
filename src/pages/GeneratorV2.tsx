@@ -59,19 +59,13 @@ export default function GeneratorV2() {
 
   // Local UI state only
   const [refreshKey, setRefreshKey] = useState(0);
+  const [savedPostsCollapsed, setSavedPostsCollapsed] = useState(true);
   const bottomSheet = useMobileBottomSheet();
 
   // Custom hooks
   const { userEmail, loginOpen, setLoginOpen } = useAuth();
-  const { hasAccess: _hasAccess } = useSubscription();
-  const {
-    // canGenerate, // Reserved for future use - usage tracking available if needed
-    isPremium: _isPremium,
-    // checkAndIncrementUsage - removed: URL extraction is now always free (Jina Reader)
-  } = useUsageTracking();
-
-  // const canExtract = () => isPremium || canGenerate; // Reserved for future use
-  // const isPro = hasAccess || isPremium; // Reserved for future premium features
+  useSubscription();
+  useUsageTracking();
   const { extractContent } = useUrlExtraction();
 
   // Feature flag check
@@ -79,21 +73,6 @@ export default function GeneratorV2() {
     rolloutPercentage: 100,
     analyticsEnabled: true
   });
-
-  // If feature flag is disabled, show maintenance notice
-  if (!newUxEnabled) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-accent/5 to-secondary flex items-center justify-center px-4">
-        <div className="max-w-xl w-full space-y-4 rounded-2xl border border-border/50 bg-background/80 backdrop-blur-sm p-8 text-center shadow-lg">
-          <h1 className="text-2xl font-semibold">Generator vorübergehend deaktiviert</h1>
-          <p className="text-muted-foreground">
-            Die klassische Version des Generators wurde entfernt. Bitte aktiviere das neue UX-Flag oder
-            wende dich an den Support, falls du weiterhin Zugriff auf den Generator benötigst.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   // Fix Magic Link auth state synchronization
   useEffect(() => {
@@ -341,7 +320,7 @@ export default function GeneratorV2() {
                                           } else {
                                             throw new Error(result.error || 'Unknown error');
                                           }
-                                        } catch (error) {
+                                        } catch {
                                           // Always fallback to share dialog on error
                                           const linkedinUrl = createLinkedInShareUrl(postContent);
                                           window.open(linkedinUrl, "_blank");
@@ -399,10 +378,27 @@ export default function GeneratorV2() {
       computed.isGeneratingAny, computed.isEditing, computed.editingPlatform, computed.editingIndex,
       handleSaveEdit, handleSavePost, actions, userEmail]);
 
+  // If feature flag is disabled, show maintenance notice
+  if (!newUxEnabled) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-accent/5 to-secondary flex items-center justify-center px-4">
+        <div className="max-w-xl w-full space-y-4 rounded-2xl border border-border/50 bg-background/80 backdrop-blur-sm p-8 text-center shadow-lg">
+          <h1 className="text-2xl font-semibold">Generator vorübergehend deaktiviert</h1>
+          <p className="text-muted-foreground">
+            Die klassische Version des Generators wurde entfernt. Bitte aktiviere das neue UX-Flag oder
+            wende dich an den Support, falls du weiterhin Zugriff auf den Generator benötigst.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Main render with UnifiedLayout
   return (
     <>
     <UnifiedLayout
+      // Reserve space for the fixed SavedPosts sidebar so it doesn't cover the main UI.
+      className={savedPostsCollapsed ? 'lg:pr-12' : 'lg:pr-[22rem]'}
       header={
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
@@ -434,7 +430,7 @@ export default function GeneratorV2() {
     {/* Desktop SavedPosts sidebar - fixed overlay that can toggle (only on desktop >= 1024px) */}
     <div className="hidden lg:block">
       <SavedPosts
-        onCollapse={() => {}} // Collapse state managed internally by SavedPosts
+        onCollapse={setSavedPostsCollapsed}
         refreshKey={refreshKey}
         isAuthenticated={!!userEmail}
         onLoginClick={() => setLoginOpen(true)}

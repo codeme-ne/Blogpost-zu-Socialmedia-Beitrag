@@ -21,7 +21,7 @@ const HowItWorks: React.FC = () => {
     {
       number: 4,
       title: "Posts generieren & anpassen",
-      description: "Claude AI erstellt mehrere Posts - bearbeite und speichere deine Favoriten"
+      description: "OpenRouter AI erstellt mehrere Posts - bearbeite und speichere deine Favoriten"
     },
     {
       number: 5,

@@ -13,8 +13,10 @@ export interface EnvironmentVariables {
   APPWRITE_PROJECT_ID?: string;
   APPWRITE_API_KEY?: string;
 
-  // Claude AI (server-side only for security)
-  CLAUDE_API_KEY?: string;
+  // OpenRouter AI (server-side only for security)
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
+  VITE_OPENROUTER_MODEL?: string;
 
   // Stripe (payment links)
   VITE_STRIPE_PAYMENT_LINK?: string;
@@ -56,7 +58,7 @@ const REQUIRED_CLIENT_VARS: (keyof EnvironmentVariables)[] = [
  * Required environment variables for server-side functionality
  */
 const REQUIRED_SERVER_VARS: (keyof EnvironmentVariables)[] = [
-  'CLAUDE_API_KEY',
+  'OPENROUTER_API_KEY',
   'STRIPE_WEBHOOK_SECRET',
   'APPWRITE_API_KEY'
 ];
@@ -196,14 +198,18 @@ export function getLinkedInConfig() {
 }
 
 /**
- * Get Claude AI configuration (server-side only for security)
+ * Get OpenRouter configuration (server-side only for security)
  */
-export function getClaudeConfig() {
+export function getOpenRouterConfig() {
   return {
-    serverApiKey: getEnvVar('CLAUDE_API_KEY'),
-    isConfigured: !!getEnvVar('CLAUDE_API_KEY')
+    serverApiKey: getEnvVar('OPENROUTER_API_KEY'),
+    model: getEnvVarWithFallback('OPENROUTER_MODEL', getEnvVarWithFallback('VITE_OPENROUTER_MODEL', 'openrouter/auto')),
+    isConfigured: !!getEnvVar('OPENROUTER_API_KEY')
   };
 }
+
+// Backward-compatible alias during migration.
+export const getClaudeConfig = getOpenRouterConfig
 
 /**
  * Get application URLs based on environment
@@ -269,6 +275,7 @@ export const env = {
 
   // Configuration objects (lazy — evaluated on access, not at import time)
   get appwrite() { return getAppwriteConfig() },
+  get openrouter() { return getOpenRouterConfig() },
   get claude() { return getClaudeConfig() },
   get linkedin() { return getLinkedInConfig() },
   get stripe() { return getStripePaymentLinks() },

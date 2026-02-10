@@ -6,6 +6,7 @@ const clientSchema = z.object({
   VITE_APPWRITE_PROJECT_ID: z.string().min(1, { message: 'VITE_APPWRITE_PROJECT_ID is required' }),
   VITE_BASE_URL: z.string().url().optional(),
   VITE_DOMAIN_NAME: z.string().optional(),
+  VITE_OPENROUTER_MODEL: z.string().optional(),
   // Stripe payment links - make them optional for development
   VITE_STRIPE_PAYMENT_LINK: z.string().url().optional(),
   VITE_STRIPE_PAYMENT_LINK_YEARLY: z.string().url().optional(),
@@ -15,7 +16,7 @@ const clientSchema = z.object({
 // Schema for server-side environment variables (for Edge functions)
 const serverSchema = z.object({
   // Required for core functionality
-  CLAUDE_API_KEY: z.string().min(1, { message: 'CLAUDE_API_KEY is required for content generation' }),
+  OPENROUTER_API_KEY: z.string().min(1, { message: 'OPENROUTER_API_KEY is required for content generation' }),
   STRIPE_SECRET_KEY: z.string().startsWith('sk_', { message: 'STRIPE_SECRET_KEY must start with sk_' }),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_', { message: 'STRIPE_WEBHOOK_SECRET must start with whsec_' }),
 
@@ -25,6 +26,7 @@ const serverSchema = z.object({
   APPWRITE_API_KEY: z.string().min(1, { message: 'APPWRITE_API_KEY is required' }),
 
   // Optional services
+  OPENROUTER_MODEL: z.string().optional(),
   FIRECRAWL_API_KEY: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
 
@@ -40,7 +42,7 @@ export function validateClientEnvironment() {
     return { success: true, env };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const errors = error.issues.map((err: any) => `${err.path.join('.')}: ${err.message}`).join('\n');
+      const errors = error.issues.map((err: z.ZodIssue) => `${err.path.join('.')}: ${err.message}`).join('\n');
       console.error('Environment validation failed (client):\n', errors);
       return {
         success: false,
@@ -59,7 +61,7 @@ export function validateServerEnvironment() {
     return { success: true, env };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const errors = error.issues.map((err: any) => `${err.path.join('.')}: ${err.message}`).join('\n');
+      const errors = error.issues.map((err: z.ZodIssue) => `${err.path.join('.')}: ${err.message}`).join('\n');
       console.error('Environment validation failed (server):\n', errors);
       return {
         success: false,

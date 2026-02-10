@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { env } from "@/lib/env-validation";
 import { getStripePlan } from "@/config/app.config";
+import { getSavedPostsForExport } from "@/api/appwrite";
+import { toast } from "sonner";
 import {
   User,
   CreditCard,
@@ -83,6 +85,7 @@ export default function Settings() {
   const { user, loading: authLoading } = useAuth();
   const { subscription, loading: subscriptionLoading, openCustomerPortal } = useSubscription();
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Get email from auth context
   const email = user?.email ?? null;
@@ -99,6 +102,51 @@ export default function Settings() {
   const planLabel = loading ? "Lädt…" : statusDetails.text;
 
   // billingPortalUrl removed - Customer Portal now handled via API
+  const handleExportData = async () => {
+    if (!user) {
+      toast.error("Bitte logge dich ein, um deine Daten zu exportieren.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const savedPosts = await getSavedPostsForExport();
+
+      const exportPayload = {
+        exportedAt: new Date().toISOString(),
+        app: {
+          name: "Social Transformer",
+          version: env.app.version,
+          domain: env.app.domainName,
+        },
+        user,
+        subscription: subscription ?? null,
+        saved_posts: savedPosts,
+      };
+
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safeEmail = (user.email || "user").replace(/[^a-z0-9._-]/gi, "_");
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `social-transformer-export-${safeEmail}-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+      toast.success("Export gestartet. Datei wurde heruntergeladen.");
+    } catch (error) {
+      if (import.meta.env.DEV) console.error("Export failed:", error);
+      toast.error("Export fehlgeschlagen. Bitte versuche es erneut.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-accent/5 to-secondary/5">
@@ -479,8 +527,10 @@ export default function Settings() {
                         variant="outline"
                         size="sm"
                         className="border-primary/50 hover:bg-primary/10"
+                        onClick={handleExportData}
+                        disabled={authLoading || !user || isExporting}
                       >
-                        Export starten
+                        {isExporting ? "Export läuft…" : "Export starten"}
                       </Button>
                     </div>
                   </div>

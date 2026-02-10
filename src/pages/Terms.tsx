@@ -56,7 +56,7 @@ export default function Terms() {
             <h2 className="text-2xl font-semibold mt-8 mb-4">§ 2 Vertragsgegenstand</h2>
             <p className="mb-4">
               (1) Der Anbieter stellt dem Kunden eine webbasierte Software-as-a-Service (SaaS) Lösung zur 
-              Verfügung, die es ermöglicht, Newsletter und Blog-Inhalte mit Hilfe von Künstlicher Intelligenz (Claude AI) 
+              Verfügung, die es ermöglicht, Newsletter und Blog-Inhalte mit Hilfe von Künstlicher Intelligenz (OpenRouter AI) 
               in Social Media Posts für verschiedene Plattformen (LinkedIn, X/Twitter, Instagram) umzuwandeln.
             </p>
             <p className="mb-4">
@@ -168,7 +168,7 @@ export default function Terms() {
           <section>
             <h2 className="text-2xl font-semibold mt-8 mb-4">§ 10 KI-generierte Inhalte und Verantwortlichkeiten</h2>
             <p className="mb-4">
-              (1) Die Plattform nutzt Künstliche Intelligenz (Claude AI von Anthropic) zur Generierung von Social Media Inhalten.
+              (1) Die Plattform nutzt Künstliche Intelligenz über OpenRouter zur Generierung von Social Media Inhalten.
             </p>
             <p className="mb-4">
               (2) Der Kunde ist verpflichtet, alle generierten Inhalte vor Veröffentlichung zu prüfen und trägt die 

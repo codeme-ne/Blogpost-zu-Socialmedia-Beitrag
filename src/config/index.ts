@@ -26,6 +26,7 @@ export {
   getStripePaymentLinks,
   getAppwriteConfig,
   getLinkedInConfig,
+  getOpenRouterConfig,
   getClaudeConfig,
   getAppUrls,
   initializeEnvironment

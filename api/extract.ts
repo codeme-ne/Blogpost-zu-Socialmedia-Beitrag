@@ -155,16 +155,21 @@ export default async function handler(req: Request) {
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
     
     try {
-      const response = await fetch(jinaUrl, {
+      // NOTE: Some Jina Reader edges reject custom browser User-Agent strings with 403.
+      // Keep headers minimal and retry without custom extraction headers on auth/forbidden.
+      let response = await fetch(jinaUrl, {
         headers: {
           'Accept': 'text/markdown, text/plain',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          // Use Jina's x-remove-selector to remove common non-content elements
+          // Use Jina's selector cleanup where supported
           'x-remove-selector': 'nav,header,footer,.newsletter,.subscribe,.archive,.sidebar,.social',
           'x-respond-with': 'markdown',
         },
         signal: controller.signal,
       });
+
+      if (response.status === 401 || response.status === 403) {
+        response = await fetch(jinaUrl, { signal: controller.signal });
+      }
       
       clearTimeout(timeoutId);
       

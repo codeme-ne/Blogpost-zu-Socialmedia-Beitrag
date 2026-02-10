@@ -26,6 +26,7 @@ vi.mock('@/libs/promptBuilder', () => ({
 }));
 
 vi.mock('@/libs/api-client', () => ({
+  generateOpenRouterMessage: vi.fn(),
   generateClaudeMessage: vi.fn(),
 }));
 
@@ -68,7 +69,7 @@ describe('useContentGeneration', () => {
 
   test('should generate content for single platform', async () => {
     const { linkedInPostsFromNewsletter } = await import('@/api/claude');
-    (linkedInPostsFromNewsletter as any).mockResolvedValue(['Generated LinkedIn post']);
+    vi.mocked(linkedInPostsFromNewsletter).mockResolvedValue(['Generated LinkedIn post']);
     
     const { result } = renderHook(() => useContentGeneration());
     
@@ -87,7 +88,7 @@ describe('useContentGeneration', () => {
   test('should generate content for multiple platforms', async () => {
     const { batchedPostsFromContent } = await import('@/api/claude');
     // Mock batched generation (used for multi-platform)
-    (batchedPostsFromContent as any).mockResolvedValue({
+    vi.mocked(batchedPostsFromContent).mockResolvedValue({
       linkedin: ['LinkedIn post'],
       x: ['X tweet'],
       instagram: [],
@@ -109,7 +110,7 @@ describe('useContentGeneration', () => {
 
   test('should handle API errors gracefully', async () => {
     const { linkedInPostsFromNewsletter } = await import('@/api/claude');
-    (linkedInPostsFromNewsletter as any).mockRejectedValue(new Error('API Error'));
+    vi.mocked(linkedInPostsFromNewsletter).mockRejectedValue(new Error('API Error'));
     
     const { result } = renderHook(() => useContentGeneration());
     
@@ -169,8 +170,8 @@ describe('useContentGeneration', () => {
   });
 
   test('should generate single post', async () => {
-    const { generateClaudeMessage } = await import('@/libs/api-client');
-    (generateClaudeMessage as any).mockResolvedValue({
+    const { generateOpenRouterMessage } = await import('@/libs/api-client');
+    vi.mocked(generateOpenRouterMessage).mockResolvedValue({
       content: [{ text: 'Generated single post' }]
     });
     
@@ -192,8 +193,8 @@ describe('useContentGeneration', () => {
   });
 
   test('should handle single post generation errors', async () => {
-    const { generateClaudeMessage } = await import('@/libs/api-client');
-    (generateClaudeMessage as any).mockRejectedValue(new Error('Generation failed'));
+    const { generateOpenRouterMessage } = await import('@/libs/api-client');
+    vi.mocked(generateOpenRouterMessage).mockRejectedValue(new Error('Generation failed'));
     
     const { result } = renderHook(() => useContentGeneration());
     

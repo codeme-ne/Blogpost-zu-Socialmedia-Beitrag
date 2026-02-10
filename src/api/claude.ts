@@ -1,12 +1,13 @@
 import { buildSinglePostPrompt, buildBatchedPostPrompt, parseBatchedResponse } from '@/libs/promptBuilder';
-import { generateClaudeMessage } from '@/libs/api-client';
+import { generateOpenRouterMessage } from '@/libs/api-client';
 import type { Platform } from '@/config/platforms';
+import { OPENROUTER_MODEL } from '@/config/ai';
 
 export async function linkedInPostsFromNewsletter(content: string) {
   try {
    const prompt = buildSinglePostPrompt(content, 'linkedin');
-   const response = await generateClaudeMessage({
-     model: 'claude-3-5-sonnet-20241022',
+   const response = await generateOpenRouterMessage({
+     model: OPENROUTER_MODEL,
      max_tokens: 4096,
      temperature: 0.85,
      messages: [{ role: 'user', content: prompt }],
@@ -82,8 +83,8 @@ export async function xTweetsFromBlog(content: string) {
   try {
     const prompt = buildSinglePostPrompt(content, 'x');
 
-    const response = await generateClaudeMessage({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await generateOpenRouterMessage({
+      model: OPENROUTER_MODEL,
       max_tokens: 280,
       temperature: 0.65,
       messages: [{ role: 'user', content: prompt }],
@@ -105,8 +106,8 @@ export async function instagramPostsFromBlog(content: string) {
   try {
     const prompt = buildSinglePostPrompt(content, 'instagram');
 
-    const response = await generateClaudeMessage({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await generateOpenRouterMessage({
+      model: OPENROUTER_MODEL,
       max_tokens: 4096,
       temperature: 0.85,
       messages: [{ role: 'user', content: prompt }],
@@ -161,8 +162,8 @@ export async function batchedPostsFromContent(
   try {
     const prompt = buildBatchedPostPrompt(content, platforms);
 
-    const response = await generateClaudeMessage({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await generateOpenRouterMessage({
+      model: OPENROUTER_MODEL,
       max_tokens: 4096,
       temperature: 0.85,
       messages: [{ role: 'user', content: prompt }],

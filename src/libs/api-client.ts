@@ -3,6 +3,7 @@
 
 import { createJWT, signOut } from '../api/appwrite';
 import { toast } from 'sonner';
+import { OPENROUTER_CHAT_ENDPOINT } from '@/config/ai';
 
 export interface ApiError {
   message: string;
@@ -17,7 +18,7 @@ export interface ApiClientConfig {
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  body?: any;
+  body?: unknown;
   headers?: Record<string, string>;
   timeout?: number;
   skipAuth?: boolean;
@@ -36,7 +37,7 @@ export class ApiClient {
   /**
    * Make an API request with automatic error handling and auth injection
    */
-  async request<T = any>(
+  async request<T = unknown>(
     endpoint: string, 
     options: RequestOptions = {}
   ): Promise<T> {
@@ -67,8 +68,8 @@ export class ApiClient {
         if (jwt) {
           requestHeaders['Authorization'] = `Bearer ${jwt}`;
         }
-      } catch (error) {
-        console.warn('Failed to get auth token:', error);
+      } catch {
+        if (import.meta.env.DEV) console.warn('Failed to get auth token');
       }
     }
 
@@ -112,7 +113,7 @@ export class ApiClient {
     const contentType = response.headers.get('content-type');
     const isJson = contentType && contentType.includes('application/json');
 
-    let responseData: any;
+    let responseData: unknown;
     
     try {
       if (isJson) {
@@ -120,14 +121,15 @@ export class ApiClient {
       } else {
         responseData = await response.text();
       }
-    } catch (error) {
+    } catch {
       responseData = null;
     }
 
     // Handle successful responses
     if (response.ok) {
       // Extract data field if present (common API pattern)
-      return responseData?.data ?? responseData;
+      const data = responseData as Record<string, unknown> | null;
+      return (data?.data ?? responseData) as T;
     }
 
     // Handle error responses
@@ -136,10 +138,11 @@ export class ApiClient {
     }
 
     // Create error object
+    const errorData = responseData as Record<string, string> | null;
     const apiError: ApiError = {
-      message: responseData?.error || responseData?.message || `HTTP ${response.status}`,
+      message: errorData?.message || errorData?.error || `HTTP ${response.status}`,
       status: response.status,
-      code: responseData?.code
+      code: errorData?.code
     };
 
     throw apiError;
@@ -148,9 +151,10 @@ export class ApiClient {
   /**
    * Handle HTTP errors with appropriate user feedback
    */
-  private async handleHttpError(response: Response, responseData: any): Promise<void> {
+  private async handleHttpError(response: Response, responseData: unknown): Promise<void> {
     const status = response.status;
-    const errorMessage = responseData?.error || responseData?.message;
+    const errData = responseData as Record<string, string> | null;
+    const errorMessage = errData?.message || errData?.error;
 
     switch (status) {
       case 401:
@@ -161,8 +165,7 @@ export class ApiClient {
         try {
           await signOut();
           window.location.href = '/signup';
-        } catch (error) {
-          console.error('Error signing out user:', error);
+        } catch {
           window.location.href = '/signup';
         }
         break;
@@ -190,23 +193,34 @@ export class ApiClient {
       case 500:
       case 502:
       case 503:
+        if (errData?.code === 'CONFIGURATION_ERROR') {
+          toast.error('OpenRouter ist nicht konfiguriert. Bitte OPENROUTER_API_KEY setzen.');
+          break;
+        }
+        if (errData?.hint) {
+          toast.error(`API nicht erreichbar. ${errData.hint}`);
+          break;
+        }
+        toast.error(errorMessage || 'Serverfehler. Bitte versuche es später erneut.');
+        break;
+
       case 504:
-        // Server errors
         toast.error('Serverfehler. Bitte versuche es später erneut.');
         break;
 
-      default:
+      default: {
         // Generic error message
         const message = errorMessage || `Fehler ${status}`;
         toast.error(message);
+      }
     }
   }
 
   /**
    * Handle network and other errors
    */
-  private handleError(error: any): void {
-    if (error.name === 'AbortError') {
+  private handleError(error: unknown): void {
+    if (error instanceof Error && error.name === 'AbortError') {
       toast.error('Anfrage-Timeout. Bitte versuche es erneut.');
     } else if (!navigator.onLine) {
       toast.error('Keine Internetverbindung. Überprüfe deine Verbindung.');
@@ -215,30 +229,30 @@ export class ApiClient {
     } else {
       // Don't show toast for ApiError (already handled)
       if (!(error as ApiError).status) {
-        console.error('API Client Error:', error);
+        if (import.meta.env.DEV) console.error('API Client Error:', error);
         toast.error('Unbekannter Fehler aufgetreten.');
       }
     }
   }
 
   // Convenience methods
-  async get<T = any>(endpoint: string, options: Omit<RequestOptions, 'method'> = {}): Promise<T> {
+  async get<T = unknown>(endpoint: string, options: Omit<RequestOptions, 'method'> = {}): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'GET' });
   }
 
-  async post<T = any>(endpoint: string, body?: any, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<T> {
+  async post<T = unknown>(endpoint: string, body?: unknown, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'POST', body });
   }
 
-  async put<T = any>(endpoint: string, body?: any, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<T> {
+  async put<T = unknown>(endpoint: string, body?: unknown, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'PUT', body });
   }
 
-  async delete<T = any>(endpoint: string, options: Omit<RequestOptions, 'method'> = {}): Promise<T> {
+  async delete<T = unknown>(endpoint: string, options: Omit<RequestOptions, 'method'> = {}): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
 
-  async patch<T = any>(endpoint: string, body?: any, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<T> {
+  async patch<T = unknown>(endpoint: string, body?: unknown, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'PATCH', body });
   }
 }
@@ -250,19 +264,19 @@ export const apiClient = new ApiClient({
 });
 
 // Export convenience functions
-export const get = <T = any>(endpoint: string, options?: Omit<RequestOptions, 'method'>) => 
+export const get = <T = unknown>(endpoint: string, options?: Omit<RequestOptions, 'method'>) =>
   apiClient.get<T>(endpoint, options);
 
-export const post = <T = any>(endpoint: string, body?: any, options?: Omit<RequestOptions, 'method' | 'body'>) => 
+export const post = <T = unknown>(endpoint: string, body?: unknown, options?: Omit<RequestOptions, 'method' | 'body'>) =>
   apiClient.post<T>(endpoint, body, options);
 
-export const put = <T = any>(endpoint: string, body?: any, options?: Omit<RequestOptions, 'method' | 'body'>) => 
+export const put = <T = unknown>(endpoint: string, body?: unknown, options?: Omit<RequestOptions, 'method' | 'body'>) =>
   apiClient.put<T>(endpoint, body, options);
 
-export const del = <T = any>(endpoint: string, options?: Omit<RequestOptions, 'method'>) => 
+export const del = <T = unknown>(endpoint: string, options?: Omit<RequestOptions, 'method'>) =>
   apiClient.delete<T>(endpoint, options);
 
-export const patch = <T = any>(endpoint: string, body?: any, options?: Omit<RequestOptions, 'method' | 'body'>) => 
+export const patch = <T = unknown>(endpoint: string, body?: unknown, options?: Omit<RequestOptions, 'method' | 'body'>) =>
   apiClient.patch<T>(endpoint, body, options);
 
 // Customer Portal specific function
@@ -281,51 +295,68 @@ export const createCheckoutSession = async (data: {
 
 export default apiClient;
 
-// === Anthropic Claude helper with timeout ===
-export interface ClaudeMessageRequestMessage {
+// === OpenRouter helper with timeout ===
+export interface OpenRouterMessageRequestMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
-export interface ClaudeMessageRequestBody {
+export interface OpenRouterMessageRequestBody {
   model: string;
   max_tokens: number;
   temperature?: number;
-  messages: ClaudeMessageRequestMessage[];
+  messages: OpenRouterMessageRequestMessage[];
 }
 
-export interface ClaudeContentBlock {
+export interface OpenRouterContentBlock {
   type?: string;
   text: string;
 }
 
-export interface ClaudeMessageResponse {
+export interface OpenRouterMessageResponse {
   id?: string;
   type?: string;
   role?: string;
-  content: ClaudeContentBlock[];
+  content: OpenRouterContentBlock[];
   stop_reason?: string | null;
   model?: string;
 }
 
 /**
- * Call Claude via our Edge Function with timeout and basic headers.
+ * Call OpenRouter via our Edge Function with timeout and basic headers.
  * Uses apiClient.post under the hood to leverage timeout/error handling.
  */
-export async function generateClaudeMessage(
-  body: ClaudeMessageRequestBody,
+export async function generateOpenRouterMessage(
+  body: OpenRouterMessageRequestBody,
   opts: { timeout?: number } = {}
-): Promise<ClaudeMessageResponse> {
-  return post<ClaudeMessageResponse>(
-    '/api/claude/v1/messages',
-    body,
-    {
-      headers: {
-        'anthropic-version': '2023-06-01',
-      },
-      timeout: opts.timeout ?? 25000,
-      // Claude proxy doesn't require auth; skip to avoid unnecessary header
-      skipAuth: true,
+): Promise<OpenRouterMessageResponse> {
+  try {
+    return await post<OpenRouterMessageResponse>(
+      OPENROUTER_CHAT_ENDPOINT,
+      body,
+      {
+        headers: {
+          'anthropic-version': '2023-06-01',
+        },
+        timeout: opts.timeout ?? 25000,
+        skipAuth: true,
+      }
+    );
+  } catch (error) {
+    const apiError = error as ApiError | undefined;
+
+    if (apiError?.status === 404) {
+      throw new Error('OpenRouter API-Route nicht gefunden. Starte `npm run dev:full` oder `npm run dev:api`.');
     }
-  );
+
+    throw error;
+  }
 }
+
+// Backward-compatible alias during migration.
+export const generateClaudeMessage = generateOpenRouterMessage
+
+export type ClaudeMessageRequestMessage = OpenRouterMessageRequestMessage
+export type ClaudeMessageRequestBody = OpenRouterMessageRequestBody
+export type ClaudeContentBlock = OpenRouterContentBlock
+export type ClaudeMessageResponse = OpenRouterMessageResponse

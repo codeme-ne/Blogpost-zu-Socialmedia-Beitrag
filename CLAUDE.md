@@ -8,14 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Social Transformer transforms newsletters/blog posts into platform-optimized social media content for LinkedIn, X, and Instagram. React 19 + Vite 7 frontend with Vercel Edge Functions backend, Appwrite Cloud (Frankfurt) for auth/database, and Claude AI (via OpenRouter) for generation.
+Social Transformer transforms newsletters/blog posts into platform-optimized social media content for LinkedIn, X, and Instagram. React 19 + Vite 7 frontend with Vercel Edge Functions backend, Appwrite Cloud (Frankfurt) for auth/database, and OpenRouter for generation.
 
 **Production**: https://linkedin-posts-one.vercel.app
 
 ## Development Commands
 
 ```bash
-npm run dev:full    # Frontend (5173) + Vercel Edge Functions (3001) - RECOMMENDED
+npm run dev:full    # Frontend (5173) + Vercel Edge Functions (3010) - RECOMMENDED
 npm run dev         # Frontend only
 npm run dev:api     # Edge Functions only
 npm run build       # TypeScript + Vite build
@@ -33,7 +33,7 @@ User Input → URL Extraction (optional) → AI Generation → Display → Save/
 ```
 
 1. **Input**: Text directly or URL via `useUrlExtraction` (Jina Reader)
-2. **Generation**: `useContentGeneration` calls `/api/claude/v1/messages` → OpenRouter → Claude
+2. **Generation**: `useContentGeneration` calls `/api/openrouter/v1/chat` → OpenRouter
 3. **Output**: Posts keyed by platform in state, can save to Appwrite or share directly
 
 ### Generation Strategy
@@ -58,7 +58,7 @@ User Input → URL Extraction (optional) → AI Generation → Display → Save/
 ### Backend (`api/`)
 Edge Functions with `runtime: 'edge'`. Each handles CORS and returns explicit status codes.
 
-- **`claude/v1/messages.ts`** - Proxies to OpenRouter (maps `claude-3-5-sonnet-20241022` → `anthropic/claude-sonnet-4`)
+- **`openrouter/v1/chat.ts`** - Proxies to OpenRouter
 - **`extract.ts`** - Jina Reader (free), 30s timeout, SSRF protection
 - **`stripe/`** - Checkout and portal creation (JWT auth via Appwrite)
 - **`stripe-webhook-simplified.ts`** - Webhook with idempotency via `processed_webhooks` collection
@@ -86,11 +86,14 @@ Edge Functions with `runtime: 'edge'`. Each handles CORS and returns explicit st
 
 **Free Tier Limits**: localStorage counter (`usage_YYYY-MM-DD`), checked against `config.limits.freeGenerationsPerDay`.
 
-**API Proxy**: Claude API key stays server-side. Client calls Edge Function which adds OpenRouter key.
+**API Proxy**: OpenRouter API key stays server-side. Client calls Edge Function with server-side key injection.
 
 **Auth Flow**: Client creates JWT via `account.createJWT()` → sends as Bearer token → Edge Function verifies via `verifyJWT()` in `api/utils/appwrite.ts`.
 
 **Document Permissions**: Saved posts use Appwrite document-level permissions (`Permission.read/update/delete(Role.user(userId))`).
+Important: the `saved_posts` collection also needs collection-level permissions for authenticated users
+(`create("users")`, `read("users")`) when `documentSecurity: true`, otherwise client-side `createDocument` fails
+with `No permissions provided for action 'create'`.
 
 **Temperature Scaling**: Base varies by platform (0.65 X, 0.7 default, 0.85 LinkedIn/Instagram). Regenerations increase progressively (0.75, 0.8, 0.85...).
 
@@ -109,7 +112,7 @@ Edge Functions with `runtime: 'edge'`. Each handles CORS and returns explicit st
 
 **Server**:
 - `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY` (Appwrite server SDK)
-- `OPENROUTER_API_KEY` or `CLAUDE_API_KEY` (AI generation)
+- `OPENROUTER_API_KEY` (AI generation)
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 
 ## Important Behaviors

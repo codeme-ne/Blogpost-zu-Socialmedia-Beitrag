@@ -192,15 +192,15 @@ export default function Privacy() {
               höchste Sicherheitsstandards für Zahlungsdaten.
             </p>
 
-            <h3 className="text-xl font-semibold mt-6 mb-3">Anthropic/Claude AI</h3>
+            <h3 className="text-xl font-semibold mt-6 mb-3">OpenRouter (KI-Verarbeitung)</h3>
             <p className="mb-4">
-              Zur Generierung von Social Media Posts aus Ihren Newsletter-Inhalten nutzen wir die Claude AI API von 
-              Anthropic Inc. (USA). Die von Ihnen eingegebenen Texte werden zur Verarbeitung an die Claude AI API 
-              übermittelt und dort verarbeitet.
+              Zur Generierung von Social Media Posts aus Ihren Newsletter-Inhalten nutzen wir OpenRouter (USA) als 
+              KI-Gateway. Die von Ihnen eingegebenen Texte werden zur Verarbeitung an OpenRouter und je nach ausgewähltem 
+              Modell an den jeweiligen KI-Anbieter (z. B. OpenAI oder Anthropic) übermittelt.
             </p>
             <p className="mb-4">
-              Anthropic verarbeitet diese Daten ausschließlich zur Bereitstellung der KI-Dienste und löscht die Daten 
-              nach der Verarbeitung. Die Übermittlung erfolgt auf Grundlage von Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung).
+              Die Verarbeitung erfolgt ausschließlich zur Bereitstellung der KI-Dienste. Die Übermittlung erfolgt auf 
+              Grundlage von Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung).
             </p>
 
             <h3 className="text-xl font-semibold mt-6 mb-3">Vercel (Hosting)</h3>
