@@ -56,9 +56,10 @@ export default async function handler(req: Request) {
     }>(req, 10 * 1024);
 
     if (!parseResult.success) {
+      const errMsg = parseResult.error;
       return createCorsResponse(
-        { error: parseResult.error },
-        { status: parseResult.error.includes('too large') ? 413 : 400, origin }
+        { error: errMsg },
+        { status: errMsg.includes('too large') ? 413 : 400, origin }
       );
     }
 

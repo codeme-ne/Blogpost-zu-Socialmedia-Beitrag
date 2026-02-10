@@ -25,7 +25,7 @@ describe('Claude API Integration', () => {
         json: async () => mockResponse
       });
 
-      const response = await fetch('/api/claude/v1/messages', {
+      const response = await fetch('/api/openrouter/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -53,7 +53,7 @@ describe('Claude API Integration', () => {
         headers: new Headers({ 'Retry-After': '30' })
       });
 
-      const response = await fetch('/api/claude/v1/messages', {
+      const response = await fetch('/api/openrouter/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -80,7 +80,7 @@ describe('Claude API Integration', () => {
         json: async () => mockErrorResponse
       });
 
-      const response = await fetch('/api/claude/v1/messages', {
+      const response = await fetch('/api/openrouter/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ /* missing messages */ })
@@ -103,7 +103,7 @@ describe('Claude API Integration', () => {
         json: async () => mockErrorResponse
       });
 
-      const response = await fetch('/api/claude/v1/messages', {
+      const response = await fetch('/api/openrouter/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,7 +120,7 @@ describe('Claude API Integration', () => {
       vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'));
 
       await expect(
-        fetch('/api/claude/v1/messages', {
+        fetch('/api/openrouter/v1/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -138,7 +138,7 @@ describe('Claude API Integration', () => {
       vi.mocked(global.fetch).mockRejectedValueOnce(timeoutError);
 
       await expect(
-        fetch('/api/claude/v1/messages', {
+        fetch('/api/openrouter/v1/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -163,7 +163,7 @@ describe('Claude API Integration', () => {
         json: async () => mockErrorResponse
       });
 
-      const response = await fetch('/api/claude/v1/messages', {
+      const response = await fetch('/api/openrouter/v1/chat', {
         method: 'GET'
       });
 
@@ -184,7 +184,7 @@ describe('Claude API Integration', () => {
         json: async () => mockErrorResponse
       });
 
-      const response = await fetch('/api/claude/v1/messages', {
+      const response = await fetch('/api/openrouter/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{ invalid json }'
@@ -207,7 +207,7 @@ describe('Claude API Integration', () => {
         json: async () => mockErrorResponse
       });
 
-      const response = await fetch('/api/claude/v1/messages', {
+      const response = await fetch('/api/openrouter/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [] })
@@ -231,7 +231,7 @@ describe('Claude API Integration', () => {
         })
       });
 
-      const response = await fetch('/api/claude/v1/messages', {
+      const response = await fetch('/api/openrouter/v1/chat', {
         method: 'OPTIONS',
         headers: { 'Origin': 'http://localhost:5173' }
       });

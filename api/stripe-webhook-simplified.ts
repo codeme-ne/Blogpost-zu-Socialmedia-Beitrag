@@ -6,11 +6,8 @@ import { ID } from 'node-appwrite'
 // eslint-disable-next-line @typescript-eslint/no-namespace
 declare module 'stripe' { namespace Stripe { interface Invoice { subscription?: string | Stripe.Subscription | null } } }
 
-// Type for subscription item with period fields (API version 2025-08-27.basil)
-interface SubscriptionItemWithPeriod extends Stripe.SubscriptionItem {
-  current_period_start?: number;
-  current_period_end?: number;
-}
+// Stripe.SubscriptionItem already includes current_period_start/end as required fields
+type SubscriptionItemWithPeriod = Stripe.SubscriptionItem
 
 export const config = {
   runtime: 'edge',
