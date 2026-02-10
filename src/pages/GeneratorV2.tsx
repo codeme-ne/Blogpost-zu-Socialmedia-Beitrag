@@ -47,6 +47,8 @@ import { createLinkedInShareUrl } from "@/api/linkedin";
 
 import { MobileBottomSheet, useMobileBottomSheet } from "@/components/mobile/MobileBottomSheet";
 import { Bookmark } from "lucide-react";
+import { useSaveAnimation } from "@/hooks/useSaveAnimation";
+import { FlyingSaveCard } from "@/components/animations/FlyingSaveCard";
 
 export default function GeneratorV2() {
   // Mark app initialization
@@ -67,6 +69,7 @@ export default function GeneratorV2() {
   useSubscription();
   useUsageTracking();
   const { extractContent } = useUrlExtraction();
+  const saveAnimation = useSaveAnimation();
 
   // Feature flag check
   const newUxEnabled = useFeatureFlag('NEW_UX', {
@@ -146,19 +149,40 @@ export default function GeneratorV2() {
     }
   }, [extractContent, actions]);
 
-  // Save post handler
-  const handleSavePost = async (content: string, platform: 'linkedin' | 'x' | 'instagram' = 'linkedin') => {
+  // Save post handler with fly-to-sidebar animation
+  const handleSavePost = async (content: string, platform: 'linkedin' | 'x' | 'instagram' = 'linkedin', sourceElement?: HTMLElement | null) => {
     if (!userEmail) {
       setLoginOpen(true);
       toast.error("Login erforderlich - Bitte logge dich ein, um Beiträge zu speichern.");
       return;
     }
-    try {
-      await savePost(content, platform);
+
+    // Try to start animation (returns false if reduced motion, no target, or already animating)
+    const isDesktop = window.innerWidth >= 1024;
+    const animating = sourceElement
+      ? saveAnimation.startAnimation(sourceElement, content, platform)
+      : false;
+
+    // Run save in parallel with animation
+    const savePromise = savePost(content, platform).then(() => {
       setRefreshKey((prev) => prev + 1);
-      toast.success("Erfolgreich gespeichert - Du findest den Beitrag in der Seitenleiste \"Gespeicherte Beiträge\".");
+    });
+
+    if (animating) {
+      // Delayed toast after animation completes (~650ms)
+      const toastMessage = isDesktop
+        ? "Beitrag gespeichert \u2013 jetzt in deiner Seitenleiste!"
+        : "Beitrag gespeichert \u2013 bei gespeicherten Beitr\u00e4gen!";
+      setTimeout(() => toast.success(toastMessage), 650);
+    } else {
+      // No animation — show toast immediately
+      toast.success("Erfolgreich gespeichert \u2013 Du findest den Beitrag in der Seitenleiste \"Gespeicherte Beitr\u00e4ge\".");
+    }
+
+    try {
+      await savePromise;
     } catch (error) {
-      toast.error(`Speichern fehlgeschlagen - Fehler beim Speichern: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(`Speichern fehlgeschlagen \u2013 Fehler beim Speichern: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -238,7 +262,7 @@ export default function GeneratorV2() {
                     {items.map((post, index) => {
                     const postContent = typeof post === 'string' ? post : post.content;
                     return (
-                      <Card key={index} className="border-muted/50 hover:shadow-lg transition-all duration-200 hover:border-primary/20">
+                      <Card key={index} data-post-card className="border-muted/50 hover:shadow-lg transition-all duration-200 hover:border-primary/20">
                         <CardContent className="p-6">
                           {computed.isEditing && computed.editingPlatform === platform && computed.editingIndex === index ? (
                             <div className="space-y-4">
@@ -277,7 +301,10 @@ export default function GeneratorV2() {
                                   />
                                   <SaveButton
                                     size="sm"
-                                    onClick={() => handleSavePost(postContent, platform)}
+                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                      const card = (e.currentTarget as HTMLElement).closest('[data-post-card]') as HTMLElement | null;
+                                      handleSavePost(postContent, platform, card);
+                                    }}
                                     text=""
                                     title="Beitrag speichern"
                                   />
@@ -434,17 +461,30 @@ export default function GeneratorV2() {
         refreshKey={refreshKey}
         isAuthenticated={!!userEmail}
         onLoginClick={() => setLoginOpen(true)}
+        highlighted={saveAnimation.highlighted}
       />
     </div>
 
     {/* Mobile/Tablet FAB for saved posts (hidden on desktop >= 1024px) */}
     <button
+      data-save-target
       onClick={bottomSheet.open}
-      className="fixed bottom-6 right-6 lg:hidden z-50 bg-primary text-primary-foreground rounded-full p-4 shadow-lg hover:shadow-xl transition-all"
+      className={`fixed bottom-6 right-6 lg:hidden z-50 bg-primary text-primary-foreground rounded-full p-4 shadow-lg hover:shadow-xl transition-all ${saveAnimation.highlighted ? 'animate-targetPulse' : ''}`}
       aria-label="Gespeicherte Beiträge öffnen"
     >
       <Bookmark className="h-6 w-6" />
     </button>
+
+    {/* Flying save animation */}
+    {saveAnimation.isAnimating && saveAnimation.sourceRect && saveAnimation.targetRect && (
+      <FlyingSaveCard
+        sourceRect={saveAnimation.sourceRect}
+        targetRect={saveAnimation.targetRect}
+        content={saveAnimation.animationContent}
+        platform={saveAnimation.animationPlatform}
+        onComplete={saveAnimation.onComplete}
+      />
+    )}
 
     {/* Mobile Bottom Sheet */}
     <MobileBottomSheet

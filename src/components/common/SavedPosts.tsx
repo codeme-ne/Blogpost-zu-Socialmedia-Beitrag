@@ -24,6 +24,8 @@ interface SavedPostsProps {
   initialExpanded?: boolean;
   /** Render as inline content (for 50/50 layout) instead of fixed sidebar */
   inline?: boolean;
+  /** Brief highlight pulse after a save animation completes */
+  highlighted?: boolean;
 }
 
 interface PostCardProps {
@@ -140,7 +142,7 @@ const PostCard = memo(({ post, editingPost, onEdit, onDelete, onStartEdit, onCan
 })
 PostCard.displayName = 'PostCard'
 
-const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuthenticated, onLoginClick, initialExpanded, inline }: SavedPostsProps) {
+const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuthenticated, onLoginClick, initialExpanded, inline, highlighted }: SavedPostsProps) {
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([])
   const [isCollapsed, setIsCollapsed] = useState(!initialExpanded)
   const [editingPost, setEditingPost] = useState<{ id: string, content: string } | null>(null)
@@ -302,7 +304,8 @@ const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuth
 
       {/* Desktop: Side panel (full right edge, below header) */}
       <div
-        className={`hidden md:block fixed right-0 top-16 h-[calc(100vh-4rem)] bg-white shadow-lg transition-transform duration-300 z-20 ${isCollapsed ? 'translate-x-[calc(100%-3rem)]' : 'translate-x-0'}`}
+        data-save-target
+        className={`hidden md:block fixed right-0 top-16 h-[calc(100vh-4rem)] bg-white shadow-lg transition-transform duration-300 z-20 ${isCollapsed ? 'translate-x-[calc(100%-3rem)]' : 'translate-x-0'} ${highlighted ? 'animate-targetPulse' : ''}`}
         style={{ width: '22rem' }}
       >
         <div className="h-full flex flex-col">
