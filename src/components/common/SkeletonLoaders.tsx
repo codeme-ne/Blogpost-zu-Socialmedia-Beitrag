@@ -235,28 +235,42 @@ export function ExtractingContent({
   );
 }
 
+const PLATFORM_COLORS: Record<string, string> = {
+  linkedin: '#0A66C2',
+  x: '#000000',
+  instagram: '#833AB4',
+};
+
+const PLATFORM_EMOJIS: Record<string, string> = {
+  linkedin: '\uD83D\uDCBC',
+  x: '\uD83D\uDC26',
+  instagram: '\uD83D\uDCF8',
+};
+
 export function GeneratingPosts({
   platform,
   message = "Generiere Posts...",
   subMessage,
   className
 }: LoadingStateProps & { platform?: string }) {
-  const platformEmojis: Record<string, string> = {
-    linkedin: '💼',
-    x: '🐦',
-    instagram: '📸',
-  };
+  const color = platform ? PLATFORM_COLORS[platform] : undefined;
 
   return (
     <div className={cn("space-y-4", className)}>
       <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 relative">
+        <div
+          className={cn("inline-flex items-center justify-center w-16 h-16 rounded-full relative", !color && "bg-primary/10")}
+          style={color ? { backgroundColor: `${color}15` } : undefined}
+        >
           {platform && (
             <span className="absolute text-3xl animate-pulse">
-              {platformEmojis[platform]}
+              {PLATFORM_EMOJIS[platform]}
             </span>
           )}
-          <div className="w-16 h-16 border-3 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <div
+            className={cn("w-16 h-16 border-3 rounded-full animate-spin", !color && "border-primary/30 border-t-primary")}
+            style={color ? { borderColor: `${color}30`, borderTopColor: color } : undefined}
+          />
         </div>
         <h3 className="text-lg font-semibold">{message}</h3>
         {subMessage && (
@@ -268,10 +282,54 @@ export function GeneratingPosts({
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="w-2 h-2 bg-primary rounded-full animate-bounce"
-            style={{ animationDelay: `${i * 0.1}s` }}
+            className={cn("w-2 h-2 rounded-full animate-bounce", !color && "bg-primary")}
+            style={{
+              backgroundColor: color || undefined,
+              animationDelay: `${i * 0.1}s`,
+            }}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+export function PlatformPreviewSkeleton({ platform }: { platform?: string }) {
+  const color = platform ? PLATFORM_COLORS[platform] : '#e5e7eb';
+
+  return (
+    <div
+      className="rounded-lg border bg-white p-4 space-y-3"
+      style={{ borderLeftWidth: '3px', borderLeftColor: color }}
+    >
+      {/* Header skeleton */}
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-full" />
+        <div className="space-y-1.5">
+          <Skeleton className="h-3.5 w-20" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+      </div>
+
+      {/* Content skeleton */}
+      <div className="space-y-2">
+        <Skeleton className="h-3.5 w-full" />
+        <Skeleton className="h-3.5 w-5/6" />
+        <Skeleton className="h-3.5 w-4/6" />
+        <Skeleton className="h-3.5 w-full" />
+        <Skeleton className="h-3.5 w-3/4" />
+      </div>
+
+      {/* Footer skeleton */}
+      <div className="pt-3 border-t">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-4 w-24" />
+          <div className="flex gap-1.5">
+            <Skeleton className="h-7 w-7 rounded" />
+            <Skeleton className="h-7 w-7 rounded" />
+            <Skeleton className="h-7 w-7 rounded" />
+          </div>
+        </div>
       </div>
     </div>
   );

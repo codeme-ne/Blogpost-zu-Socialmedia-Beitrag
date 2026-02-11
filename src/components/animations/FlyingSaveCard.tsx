@@ -1,7 +1,6 @@
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { Badge } from '@/components/ui/badge'
-import { PLATFORM_LABEL, type Platform } from '@/config/platforms'
+import { PLATFORM_META, type Platform } from '@/config/platforms'
 
 interface FlyingSaveCardProps {
   sourceRect: DOMRect
@@ -18,6 +17,7 @@ export function FlyingSaveCard({
   platform,
   onComplete,
 }: FlyingSaveCardProps) {
+  const meta = PLATFORM_META[platform]
   const targetCenterX = targetRect.left + targetRect.width / 2
   const targetCenterY = targetRect.top + targetRect.height / 2
 
@@ -26,7 +26,8 @@ export function FlyingSaveCard({
 
   return createPortal(
     <motion.div
-      className="fixed z-[9999] pointer-events-none rounded-lg border border-border bg-card shadow-xl overflow-hidden"
+      className="fixed z-[9999] pointer-events-none rounded-lg bg-card shadow-xl overflow-hidden"
+      style={{ border: `2px solid ${meta.color}` }}
       initial={{
         left: sourceRect.left,
         top: sourceRect.top,
@@ -51,9 +52,12 @@ export function FlyingSaveCard({
       onAnimationComplete={onComplete}
     >
       <div className="p-4">
-        <Badge variant="outline" className="text-xs mb-2">
-          {PLATFORM_LABEL[platform]}
-        </Badge>
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="text-xs">{meta.emoji}</span>
+          <span className="text-xs font-medium" style={{ color: meta.color }}>
+            {meta.label}
+          </span>
+        </div>
         <p className="text-sm text-foreground/80 leading-relaxed line-clamp-4">
           {truncated}
         </p>

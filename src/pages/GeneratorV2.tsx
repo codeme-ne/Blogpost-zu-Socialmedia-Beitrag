@@ -1,11 +1,10 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { toast } from "sonner";
 
 // Feature flag and layout components
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { UnifiedLayout } from "@/components/layouts/UnifiedLayout";
+import { UnifiedLayout, type MobileTab } from "@/components/layouts/UnifiedLayout";
 import { EnhancedUrlExtractor } from "@/components/common/EnhancedUrlExtractor";
-import { CharacterCounterTextarea } from "@/components/common/CharacterCounter";
 import {
   ExtractingContent,
   GeneratingPosts
@@ -13,21 +12,13 @@ import {
 
 // Existing components and hooks
 import { SavedPosts } from "@/components/common/SavedPosts";
+import { PlatformPreviewCard } from "@/components/common/PlatformPreviewCard";
 import { AccountButton } from "@/components/common/AccountButton";
 import { Auth } from "@/components/common/Auth";
 import PlatformGenerators from "@/components/common/PlatformGenerators";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { CopyButton } from "@/components/ui/copy-button";
-import {
-  SaveButton,
-  EditButton,
-  LinkedInShareButton,
-  XShareButton,
-  InstagramShareButton,
-} from "@/design-system/components/ActionButtons";
 
 // Hooks
 import { useAuth } from "@/hooks/useAuth";
@@ -41,7 +32,7 @@ import { perfMonitor, PERF_MARKS, PERF_MEASURES } from "@/utils/performance";
 
 // Types
 import type { Platform } from "@/config/platforms";
-import { PLATFORM_LABEL } from "@/config/platforms";
+import { PLATFORM_LABEL, PLATFORM_META } from "@/config/platforms";
 import { savePost } from "@/api/appwrite";
 import { createLinkedInShareUrl } from "@/api/linkedin";
 
@@ -59,7 +50,8 @@ export default function GeneratorV2() {
 
   // Local UI state only
   const [refreshKey, setRefreshKey] = useState(0);
-  const [savedPostsCollapsed, setSavedPostsCollapsed] = useState(true);
+  const [mobileTab, setMobileTab] = useState<MobileTab>('input');
+  const prevPostCountRef = useRef(0);
 
   // Custom hooks
   const { userEmail, loginOpen, setLoginOpen } = useAuth();
@@ -105,14 +97,26 @@ export default function GeneratorV2() {
     }
   }, [state.inputText, state.postsByPlatform, state.completedSteps, actions]);
 
+  // Smart Flow: Auto-switch to output tab on mobile after generation
+  useEffect(() => {
+    const currentPostCount = Object.values(state.postsByPlatform)
+      .reduce((sum, posts) => sum + posts.length, 0);
+
+    if (currentPostCount > prevPostCountRef.current && currentPostCount > 0) {
+      // New posts generated - switch to output on mobile
+      if (window.innerWidth < 1024) {
+        setMobileTab('output');
+      }
+    }
+    prevPostCountRef.current = currentPostCount;
+  }, [state.postsByPlatform]);
+
   // Display errors with toasts
   useEffect(() => {
-    // Handle extraction errors
     if (state.errors.extraction) {
       toast.error(`Extraktionsfehler: ${state.errors.extraction}`);
     }
 
-    // Handle generation errors
     if (state.errors.generation) {
       Object.entries(state.errors.generation).forEach(([platform, error]) => {
         if (error) {
@@ -122,7 +126,7 @@ export default function GeneratorV2() {
     }
   }, [state.errors]);
 
-  // URL extraction handler (uses Jina Reader - always free)
+  // URL extraction handler
   const handleExtract = useCallback(async (url: string) => {
     if (!url) return;
 
@@ -146,48 +150,87 @@ export default function GeneratorV2() {
     }
   }, [extractContent, actions]);
 
-  // Save post handler with fly-to-sidebar animation
-  const handleSavePost = async (content: string, platform: 'linkedin' | 'x' | 'instagram' = 'linkedin', sourceElement?: HTMLElement | null) => {
+  // Save post handler with fly-to animation
+  const handleSavePost = useCallback(async (content: string, platform: Platform, sourceElement?: HTMLElement | null) => {
     if (!userEmail) {
       setLoginOpen(true);
       toast.error("Login erforderlich - Bitte logge dich ein, um Beiträge zu speichern.");
       return;
     }
 
-    // Try to start animation (returns false if reduced motion, no target, or already animating)
-    const isDesktop = window.innerWidth >= 1024;
+    const isMobile = window.innerWidth < 1024;
     const animating = sourceElement
       ? saveAnimation.startAnimation(sourceElement, content, platform)
       : false;
 
-    // Run save in parallel with animation
     const savePromise = savePost(content, platform).then(() => {
       setRefreshKey((prev) => prev + 1);
     });
 
     if (animating) {
-      // Delayed toast after animation completes (~650ms)
-      const toastMessage = isDesktop
-        ? "Beitrag gespeichert \u2013 jetzt in deiner Seitenleiste!"
-        : "Beitrag gespeichert \u2013 bei gespeicherten Beitr\u00e4gen!";
-      setTimeout(() => toast.success(toastMessage), 650);
+      const toastMessage = isMobile
+        ? "Beitrag gespeichert!"
+        : "Beitrag gespeichert!";
+      setTimeout(() => {
+        toast.success(toastMessage);
+        // Smart Flow: switch to saved tab on mobile after animation
+        if (isMobile) {
+          setMobileTab('saved');
+        }
+      }, 650);
     } else {
-      // No animation — show toast immediately
-      toast.success("Erfolgreich gespeichert \u2013 Du findest den Beitrag in der Seitenleiste \"Gespeicherte Beitr\u00e4ge\".");
+      toast.success("Beitrag gespeichert!");
+      if (isMobile) {
+        setTimeout(() => setMobileTab('saved'), 300);
+      }
     }
 
     try {
       await savePromise;
     } catch (error) {
-      toast.error(`Speichern fehlgeschlagen \u2013 Fehler beim Speichern: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(`Speichern fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
     }
-  };
+  }, [userEmail, setLoginOpen, saveAnimation]);
+
+  // LinkedIn share handler
+  const handleLinkedInShare = useCallback(async (postContent: string) => {
+    try {
+      const { createJWT } = await import('@/api/appwrite');
+      const jwt = await createJWT();
+
+      const response = await fetch('/api/share/linkedin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(jwt ? { 'Authorization': `Bearer ${jwt}` } : {})
+        },
+        body: JSON.stringify({ content: postContent })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success("LinkedIn Draft erstellt!");
+        if (result.linkedinUrl) {
+          window.open(result.linkedinUrl, "_blank", "noopener,noreferrer");
+        }
+      } else if (result.fallback) {
+        const linkedinUrl = createLinkedInShareUrl(postContent);
+        window.open(linkedinUrl, "_blank", "noopener,noreferrer");
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+    } catch {
+      const linkedinUrl = createLinkedInShareUrl(postContent);
+      window.open(linkedinUrl, "_blank", "noopener,noreferrer");
+    }
+  }, []);
 
   const handleSaveEdit = () => {
     actions.saveEdit();
   };
 
-  // Memoized Input Area component
+  // Memoized Input Area
   const InputArea = useMemo(() => (
     <div className="space-y-6">
       <EnhancedUrlExtractor
@@ -222,14 +265,14 @@ export default function GeneratorV2() {
     </div>
   ), [state.inputText, state.isExtracting, handleExtract, actions]);
 
-  // Stable Output Area - prevents layout jumping by maintaining consistent container
+  // Output Area with PlatformPreviewCards
   const OutputArea = useMemo(() => {
     const hasContent = Object.values(state.postsByPlatform).some(posts => posts.length > 0);
     const isLoading = state.isExtracting || computed.isGeneratingAny;
 
     return (
       <div className="relative min-h-[400px] w-full">
-        {/* Loading Overlays - Absolutely positioned to prevent layout shifts */}
+        {/* Loading Overlays */}
         {state.isExtracting && (
           <div className="absolute inset-0 z-10 bg-background/95 backdrop-blur-sm rounded-lg border border-border/50 flex items-center justify-center">
             <ExtractingContent progress={state.extractionProgress} />
@@ -242,153 +285,68 @@ export default function GeneratorV2() {
           </div>
         )}
 
-        {/* Main Content Area - Always present, prevents jumping */}
+        {/* Main Content Area */}
         <div className={`space-y-6 transition-opacity duration-300 ${isLoading ? 'opacity-30' : 'opacity-100'}`}>
           {(["linkedin", "x", "instagram"] as Platform[]).map((platform) => {
             const items = state.postsByPlatform[platform] || [];
             if (items.length === 0) return null;
 
+            const meta = PLATFORM_META[platform];
+
             return (
-              <Card key={platform} className="shadow-xl border-0 bg-card/50 backdrop-blur-sm">
-                <CardHeader>
-                  <CardTitle>{PLATFORM_LABEL[platform]} – {items.length} Beiträge</CardTitle>
-                  <CardDescription>Plattformspezifische Vorschau und Bearbeitung</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 gap-6">
-                    {items.map((post, index) => {
-                    const postContent = typeof post === 'string' ? post : post.content;
-                    return (
-                      <Card key={index} data-post-card className="border-muted/50 hover:shadow-lg transition-all duration-200 hover:border-primary/20">
-                        <CardContent className="p-6">
-                          {computed.isEditing && computed.editingPlatform === platform && computed.editingIndex === index ? (
-                            <div className="space-y-4">
-                              <CharacterCounterTextarea
-                                value={state.editingPost?.content || ''}
-                                onChange={(value) => actions.updateEditingContent(value)}
-                                platform={platform}
-                                rows={8}
-                              />
-                              <div className="flex justify-end gap-2">
-                                <Button variant="ghost" size="sm" onClick={actions.cancelEdit}>
-                                  Abbrechen
-                                </Button>
-                                <SaveButton size="sm" onClick={handleSaveEdit} />
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <p className="text-foreground whitespace-pre-wrap leading-relaxed mb-4">{postContent}</p>
-                              <div className="flex justify-between items-center pt-4 border-t border-muted/30">
-                                <Badge variant="outline" className="text-xs">
-                                  {PLATFORM_LABEL[platform]} · Post #{index + 1}
-                                </Badge>
-                                <div className="flex gap-2">
-                                  <CopyButton
-                                    text={postContent}
-                                    size="sm"
-                                    variant="ghost"
-                                    onCopy={() => toast.success('Beitrag kopiert!')}
-                                  />
-                                  <EditButton
-                                    size="sm"
-                                    onClick={() => actions.startEdit(platform, index, postContent)}
-                                    text=""
-                                    title="Beitrag bearbeiten"
-                                  />
-                                  <SaveButton
-                                    size="sm"
-                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                      const card = (e.currentTarget as HTMLElement).closest('[data-post-card]') as HTMLElement | null;
-                                      handleSavePost(postContent, platform, card);
-                                    }}
-                                    text=""
-                                    title="Beitrag speichern"
-                                  />
-                                  {/* Platform-specific share buttons */}
-                                  {platform === "linkedin" && (
-                                    <LinkedInShareButton
-                                      size="sm"
-                                      text=""
-                                      onClick={async () => {
-                                        try {
-                                          // Get auth token from Appwrite
-                                          const { createJWT } = await import('@/api/appwrite');
-                                          const jwt = await createJWT();
+              <div key={platform} className="space-y-3">
+                {/* Platform section header */}
+                <div className="flex items-center gap-2">
+                  <span>{meta.emoji}</span>
+                  <span className="font-semibold text-sm">{meta.label}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {items.length} {items.length === 1 ? 'Beitrag' : 'Beiträge'}
+                  </span>
+                </div>
 
-                                          // Call our secure backend endpoint instead of exposing credentials
-                                          const response = await fetch('/api/share/linkedin', {
-                                            method: 'POST',
-                                            headers: {
-                                              'Content-Type': 'application/json',
-                                              // Optional: Add auth token if user is logged in
-                                              ...(jwt ? {
-                                                'Authorization': `Bearer ${jwt}`
-                                              } : {})
-                                            },
-                                            body: JSON.stringify({ content: postContent })
-                                          });
+                {/* Preview cards */}
+                {items.map((post, index) => {
+                  const postContent = typeof post === 'string' ? post : post.content;
+                  const isEditingThis = computed.isEditing && computed.editingPlatform === platform && computed.editingIndex === index;
 
-                                          const result = await response.json();
-
-                                          if (result.success) {
-                                            toast.success("LinkedIn Draft erstellt! 🚀");
-                                            // Open LinkedIn posts page
-                                            if (result.linkedinUrl) {
-                                              window.open(result.linkedinUrl, "_blank", "noopener,noreferrer");
-                                            }
-                                          } else if (result.fallback) {
-                                            // Use share dialog as fallback
-                                            const linkedinUrl = createLinkedInShareUrl(postContent);
-                                            window.open(linkedinUrl, "_blank", "noopener,noreferrer");
-                                          } else {
-                                            throw new Error(result.error || 'Unknown error');
-                                          }
-                                        } catch {
-                                          // Always fallback to share dialog on error
-                                          const linkedinUrl = createLinkedInShareUrl(postContent);
-                                          window.open(linkedinUrl, "_blank", "noopener,noreferrer");
-                                        }
-                                      }}
-                                      title="Auf LinkedIn teilen"
-                                    />
-                                  )}
-                                  {platform === "x" && (
-                                    <XShareButton
-                                      size="sm"
-                                      text=""
-                                      tweetContent={postContent}
-                                      title="Auf X teilen"
-                                    />
-                                  )}
-                                  {platform === "instagram" && (
-                                    <InstagramShareButton
-                                      size="sm"
-                                      text=""
-                                      postContent={postContent}
-                                      title="Auf Instagram teilen"
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                  </div>
-                </CardContent>
-              </Card>
+                  return (
+                    <PlatformPreviewCard
+                      key={index}
+                      platform={platform}
+                      content={postContent}
+                      index={index}
+                      isEditing={isEditingThis}
+                      editContent={state.editingPost?.content || ''}
+                      onEditContentChange={(value) => actions.updateEditingContent(value)}
+                      onStartEdit={() => actions.startEdit(platform, index, postContent)}
+                      onCancelEdit={actions.cancelEdit}
+                      onSaveEdit={handleSaveEdit}
+                      onSave={(e) => {
+                        const card = (e.currentTarget as HTMLElement).closest('[data-post-card]') as HTMLElement | null;
+                        handleSavePost(postContent, platform, card);
+                      }}
+                      onShare={platform === 'linkedin' ? () => handleLinkedInShare(postContent) : undefined}
+                    />
+                  );
+                })}
+              </div>
             );
           })}
 
-          {/* Stable Empty State Placeholder */}
+          {/* Empty State */}
           {!hasContent && (
             <div className="text-center py-16 text-muted-foreground">
-              <div className="max-w-md mx-auto space-y-3">
-                <div className="w-16 h-16 mx-auto bg-muted/30 rounded-lg flex items-center justify-center">
-                  <span className="text-2xl">✨</span>
+              <div className="max-w-md mx-auto space-y-4">
+                <div className="flex justify-center gap-3">
+                  {(["linkedin", "x", "instagram"] as Platform[]).map((p) => (
+                    <div
+                      key={p}
+                      className="w-12 h-12 rounded-lg flex items-center justify-center text-xl"
+                      style={{ backgroundColor: `${PLATFORM_META[p].color}10` }}
+                    >
+                      {PLATFORM_META[p].emoji}
+                    </div>
+                  ))}
                 </div>
                 <h3 className="text-lg font-medium text-foreground">Bereit für deinen ersten Post</h3>
                 <p className="text-sm">Füge Content hinzu und wähle eine Plattform aus</p>
@@ -400,7 +358,7 @@ export default function GeneratorV2() {
     );
   }, [state.isExtracting, state.extractionProgress, state.generationProgress, state.postsByPlatform, state.editingPost,
       computed.isGeneratingAny, computed.isEditing, computed.editingPlatform, computed.editingIndex,
-      handleSaveEdit, handleSavePost, actions, userEmail]);
+      handleSaveEdit, handleSavePost, handleLinkedInShare, actions]);
 
   // If feature flag is disabled, show maintenance notice
   if (!newUxEnabled) {
@@ -420,57 +378,55 @@ export default function GeneratorV2() {
   // Main render with UnifiedLayout
   return (
     <>
-    <UnifiedLayout
-      // Reserve space for the fixed SavedPosts sidebar so it doesn't cover the main UI.
-      className={savedPostsCollapsed ? 'lg:pr-12' : 'lg:pr-[22rem]'}
-      header={
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Social Transformer
-          </h1>
-          <div className="flex items-center gap-4">
-            {userEmail ? (
-              <AccountButton />
-            ) : (
-              <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="default" size="sm">Login</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Einloggen</DialogTitle>
-                  </DialogHeader>
-                  <Auth />
-                </DialogContent>
-              </Dialog>
-            )}
+      <UnifiedLayout
+        activeTab={mobileTab}
+        onMobileTabChange={setMobileTab}
+        savedPostsArea={
+          <SavedPosts
+            refreshKey={refreshKey}
+            isAuthenticated={!!userEmail}
+            onLoginClick={() => setLoginOpen(true)}
+            highlighted={saveAnimation.highlighted}
+          />
+        }
+        header={
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              Social Transformer
+            </h1>
+            <div className="flex items-center gap-4">
+              {userEmail ? (
+                <AccountButton />
+              ) : (
+                <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="default" size="sm">Login</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Einloggen</DialogTitle>
+                    </DialogHeader>
+                    <Auth />
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
           </div>
-        </div>
-      }
-      inputArea={InputArea}
-      outputArea={OutputArea}
-    />
-
-    {/* SavedPosts: mobile accordion (<1024px) + desktop sidebar (>=1024px) */}
-    <SavedPosts
-      onCollapse={setSavedPostsCollapsed}
-      refreshKey={refreshKey}
-      isAuthenticated={!!userEmail}
-      onLoginClick={() => setLoginOpen(true)}
-      highlighted={saveAnimation.highlighted}
-    />
-
-    {/* Flying save animation */}
-    {saveAnimation.isAnimating && saveAnimation.sourceRect && saveAnimation.targetRect && (
-      <FlyingSaveCard
-        sourceRect={saveAnimation.sourceRect}
-        targetRect={saveAnimation.targetRect}
-        content={saveAnimation.animationContent}
-        platform={saveAnimation.animationPlatform}
-        onComplete={saveAnimation.onComplete}
+        }
+        inputArea={InputArea}
+        outputArea={OutputArea}
       />
-    )}
 
+      {/* Flying save animation */}
+      {saveAnimation.isAnimating && saveAnimation.sourceRect && saveAnimation.targetRect && (
+        <FlyingSaveCard
+          sourceRect={saveAnimation.sourceRect}
+          targetRect={saveAnimation.targetRect}
+          content={saveAnimation.animationContent}
+          platform={saveAnimation.animationPlatform}
+          onComplete={saveAnimation.onComplete}
+        />
+      )}
     </>
   );
 }

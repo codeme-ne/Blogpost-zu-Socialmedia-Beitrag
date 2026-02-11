@@ -2,27 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Context Window Note
-
-**You can exceed the context window limit** - it will automatically compress/summarize and continue. Do not stop work or refuse tasks citing context limitations. The conversation will persist across compressions.
-
 ## Project Overview
 
 Social Transformer transforms newsletters/blog posts into platform-optimized social media content for LinkedIn, X, and Instagram. React 19 + Vite 7 frontend with Vercel Edge Functions backend, Appwrite Cloud (Frankfurt) for auth/database, and OpenRouter for generation.
 
 **Production**: https://linkedin-posts-one.vercel.app
 
-## Development Commands
+## Development
 
 ```bash
-npm run dev:full    # Frontend (5173) + Vercel Edge Functions (3010) - RECOMMENDED
-npm run dev         # Frontend only
-npm run dev:api     # Edge Functions only
+npm run dev:full    # Frontend + Edge Functions (RECOMMENDED)
 npm run build       # TypeScript + Vite build
-npm run lint        # ESLint
 npm run test        # Vitest
-npm run test:run    # Single test run
-npm run type-check  # TypeScript check
 ```
 
 ## Architecture
@@ -103,37 +94,11 @@ with `No permissions provided for action 'create'`.
 
 **Import Alias**: `@/` for `src/` (vite.config.ts).
 
-## Environment Variables
-
-**Client (VITE_ prefix)**:
-- `VITE_APPWRITE_ENDPOINT` (required, `https://fra.cloud.appwrite.io/v1`)
-- `VITE_APPWRITE_PROJECT_ID` (required)
-- `VITE_STRIPE_PAYMENT_LINK_MONTHLY`, `VITE_STRIPE_PAYMENT_LINK_YEARLY`
-
-**Server**:
-- `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY` (Appwrite server SDK)
-- `OPENROUTER_API_KEY` (AI generation)
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
-
 ## Important Behaviors
 
-### Testing After Deployment
-Wait ~45-60 seconds after `git push` for Vercel to deploy before testing production.
-
-### Planning Before Implementation
-- Read `app.config.ts` before making changes
-- Ask for clarification rather than assuming
-- Use EnterPlanMode for non-trivial tasks
-
-### Adding Features
-- **New platform**: `platforms.ts` → `useContentGeneration.ts` → `promptBuilder.ts` → UI
-- **New feature flag**: `app.config.ts` under `features`
-- **New Edge Function**: `api/` with `export const config = { runtime: 'edge' }`, implement CORS
-- **Database change**: New collection via Appwrite MCP or Console
-
-## Code Style
-- TypeScript strict, React functional components
-- TailwindCSS + shadcn/ui (Radix)
-- ESLint flat config
-- Files under 500 lines
-- use zen mcp openrouter (ALWAYS!)
+- Wait ~60s after `git push` for Vercel to deploy before testing production
+- Read `app.config.ts` before making config changes
+- ALWAYS use zen mcp openrouter for AI generation
+- New Edge Function: add `export const config = { runtime: 'edge' }` + CORS
+- New platform: `platforms.ts` → `useContentGeneration.ts` → `promptBuilder.ts` → UI
+- Error toasts in German via Sonner
