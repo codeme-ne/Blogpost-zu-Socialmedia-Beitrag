@@ -154,7 +154,7 @@ export default function Settings() {
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-xl border-b border-border/50 md:hidden">
         <div className="flex items-center justify-between p-4">
           <Link to="/app">
-            <Button variant="ghost" size="icon" className="hover:bg-primary/10" aria-label="Zurück zum Generator">
+            <Button variant="ghost" size="icon" aria-label="Zurück zum Generator">
               <ArrowLeft className="h-5 w-5" aria-hidden="true" />
             </Button>
           </Link>
@@ -181,7 +181,7 @@ export default function Settings() {
             </div>
             <div className="flex items-center gap-3">
               <Link to="/app">
-                <Button variant="outline" className="gap-2 hover:bg-primary/10 transition-colors" aria-label="Zurück zum Generator">
+                <Button variant="outline" className="gap-2 transition-colors" aria-label="Zurück zum Generator">
                   <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                   Zurück zum Generator
                 </Button>
@@ -220,10 +220,6 @@ export default function Settings() {
                         <Skeleton className="h-5 w-48" />
                       </div>
                     </div>
-                    <div className="pt-4 border-t border-border/50">
-                      <Skeleton className="h-4 w-24 mb-2" />
-                      <Skeleton className="h-4 w-36" />
-                    </div>
                   </div>
                 </>
               ) : (
@@ -244,13 +240,6 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {/* Account Status */}
-                  <div className="pt-4 border-t border-border/50">
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>Logout über Benutzer-Menü (oben rechts) verfügbar</p>
-                      <p>Kontoeinstellungen und Daten werden sicher verwaltet</p>
-                    </div>
-                  </div>
                 </>
               )}
             </CardContent>
@@ -402,8 +391,8 @@ export default function Settings() {
             <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-shadow">
               <CardHeader className="pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-secondary/10">
-                    <FileText className="h-5 w-5 text-secondary" />
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <FileText className="h-5 w-5 text-primary" />
                   </div>
                   <div>
                     <CardTitle id="quick-actions-heading" className="text-lg">Schnellzugriff</CardTitle>
@@ -416,7 +405,6 @@ export default function Settings() {
               <CardContent className="space-y-4">
                 <div className="space-y-3">
                   <div>
-                    <h4 className="text-sm font-medium text-foreground mb-3">Hauptfunktionen</h4>
                     <div className="space-y-2">
                       <Link to="/app?expand=saved" className="block group">
                         <Button
@@ -435,15 +423,6 @@ export default function Settings() {
                 </div>
               </CardContent>
 
-              {/* Card Footer - Help Text */}
-              <div className="px-6 py-4 border-t border-border/50 bg-muted/20">
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p><strong>Mobile:</strong> Untere Leiste</p>
-                    <p><strong>Desktop:</strong> Rechte Seitenleiste</p>
-                  </div>
-                </div>
-              </div>
             </Card>
           </section>
 
@@ -466,7 +445,7 @@ export default function Settings() {
                 <Button
                   variant="outline"
                   onClick={() => window.open(`mailto:${env.app.supportEmail}`, "_blank", "noopener,noreferrer")}
-                  className="gap-2 justify-start hover:text-accent-foreground"
+                  className="gap-2 justify-start"
                 >
                   <Mail className="h-4 w-4" />
                   E-Mail Support
@@ -474,7 +453,7 @@ export default function Settings() {
                 <Button
                   variant="outline"
                   onClick={() => window.open("/privacy", "_blank", "noopener,noreferrer")}
-                  className="gap-2 justify-start hover:text-accent-foreground"
+                  className="gap-2 justify-start"
                 >
                   <Shield className="h-4 w-4" />
                   Datenschutz
@@ -482,7 +461,7 @@ export default function Settings() {
                 <Button
                   variant="outline"
                   onClick={() => window.open("/imprint", "_blank", "noopener,noreferrer")}
-                  className="gap-2 justify-start hover:text-accent-foreground"
+                  className="gap-2 justify-start"
                 >
                   <FileText className="h-4 w-4" />
                   Impressum
@@ -526,7 +505,7 @@ export default function Settings() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="border-primary/50 hover:bg-primary/10"
+                        className="border-primary/50"
                         onClick={handleExportData}
                         disabled={authLoading || !user || isExporting}
                       >
@@ -593,7 +572,7 @@ export default function Settings() {
                   <div className="w-2 h-2 rounded-full bg-green-500" />
                   <span>Status: Operational</span>
                 </div>
-                <span>© 2024 {env.app.domainName}</span>
+                <span>© {new Date().getFullYear()} {env.app.domainName}</span>
               </div>
             </div>
           </div>
