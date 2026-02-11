@@ -243,33 +243,38 @@ export default async function handler(req: Request) {
     // --- SSE STREAMING PATH ---
     if (wantsStream) {
       const stream = new ReadableStream({
-        async start(streamController) {
+        start(streamController) {
           const encoder = new TextEncoder();
           const send = (stage: string, data?: Record<string, unknown>) => {
             streamController.enqueue(encoder.encode(sseEvent(stage, data)));
           };
 
-          try {
-            send('validating', { message: 'URL wird validiert...' });
+          // Detach async work from start() so the stream flushes immediately.
+          // If start() returns a Promise, ReadableStream blocks delivery until
+          // that Promise resolves — which defeats the purpose of streaming.
+          (async () => {
+            try {
+              send('validating', { message: 'URL wird validiert...' });
 
-            send('fetching', { message: 'Lade Webseite über Jina Reader...' });
-            const rawContent = await fetchFromJina(url, controller.signal);
-            clearTimeout(timeoutId);
+              send('fetching', { message: 'Lade Webseite über Jina Reader...' });
+              const rawContent = await fetchFromJina(url, controller.signal);
+              clearTimeout(timeoutId);
 
-            send('processing', { message: 'Verarbeite und bereinige Content...' });
-            const payload = processContent(rawContent, url);
+              send('processing', { message: 'Verarbeite und bereinige Content...' });
+              const payload = processContent(rawContent, url);
 
-            send('complete', { data: payload });
-          } catch (err) {
-            clearTimeout(timeoutId);
-            const isTimeout = err instanceof Error && err.name === 'AbortError';
-            const message = isTimeout
-              ? 'Request timed out. The page took too long to load.'
-              : err instanceof Error ? err.message : 'Failed to extract content';
-            send('error', { message });
-          } finally {
-            streamController.close();
-          }
+              send('complete', { data: payload });
+            } catch (err) {
+              clearTimeout(timeoutId);
+              const isTimeout = err instanceof Error && err.name === 'AbortError';
+              const message = isTimeout
+                ? 'Request timed out. The page took too long to load.'
+                : err instanceof Error ? err.message : 'Failed to extract content';
+              send('error', { message });
+            } finally {
+              streamController.close();
+            }
+          })();
         },
       });
 
@@ -278,8 +283,8 @@ export default async function handler(req: Request) {
         headers: {
           ...cors,
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Accel-Buffering': 'no',
         },
       });
     }
