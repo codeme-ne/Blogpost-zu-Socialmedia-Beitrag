@@ -272,8 +272,6 @@ export const useContentGeneration = () => {
         decrementUsage()
       }
 
-      toast.success(`${platform.toUpperCase()} Post generiert!`)
-
       return generatedPost
     } catch (error: unknown) {
       const err = toError(error)
