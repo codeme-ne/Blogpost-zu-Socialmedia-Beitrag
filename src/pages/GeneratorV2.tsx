@@ -45,8 +45,6 @@ import { PLATFORM_LABEL } from "@/config/platforms";
 import { savePost } from "@/api/appwrite";
 import { createLinkedInShareUrl } from "@/api/linkedin";
 
-import { MobileBottomSheet, useMobileBottomSheet } from "@/components/mobile/MobileBottomSheet";
-import { Bookmark } from "lucide-react";
 import { useSaveAnimation } from "@/hooks/useSaveAnimation";
 import { FlyingSaveCard } from "@/components/animations/FlyingSaveCard";
 
@@ -62,7 +60,6 @@ export default function GeneratorV2() {
   // Local UI state only
   const [refreshKey, setRefreshKey] = useState(0);
   const [savedPostsCollapsed, setSavedPostsCollapsed] = useState(true);
-  const bottomSheet = useMobileBottomSheet();
 
   // Custom hooks
   const { userEmail, loginOpen, setLoginOpen } = useAuth();
@@ -454,26 +451,14 @@ export default function GeneratorV2() {
       outputArea={OutputArea}
     />
 
-    {/* Desktop SavedPosts sidebar - fixed overlay that can toggle (only on desktop >= 1024px) */}
-    <div className="hidden lg:block">
-      <SavedPosts
-        onCollapse={setSavedPostsCollapsed}
-        refreshKey={refreshKey}
-        isAuthenticated={!!userEmail}
-        onLoginClick={() => setLoginOpen(true)}
-        highlighted={saveAnimation.highlighted}
-      />
-    </div>
-
-    {/* Mobile/Tablet FAB for saved posts (hidden on desktop >= 1024px) */}
-    <button
-      data-save-target
-      onClick={bottomSheet.open}
-      className={`fixed bottom-6 right-6 lg:hidden z-50 bg-primary text-primary-foreground rounded-full p-4 shadow-lg hover:shadow-xl transition-all ${saveAnimation.highlighted ? 'animate-targetPulse' : ''}`}
-      aria-label="Gespeicherte Beiträge öffnen"
-    >
-      <Bookmark className="h-6 w-6" />
-    </button>
+    {/* SavedPosts: mobile accordion (<1024px) + desktop sidebar (>=1024px) */}
+    <SavedPosts
+      onCollapse={setSavedPostsCollapsed}
+      refreshKey={refreshKey}
+      isAuthenticated={!!userEmail}
+      onLoginClick={() => setLoginOpen(true)}
+      highlighted={saveAnimation.highlighted}
+    />
 
     {/* Flying save animation */}
     {saveAnimation.isAnimating && saveAnimation.sourceRect && saveAnimation.targetRect && (
@@ -486,24 +471,6 @@ export default function GeneratorV2() {
       />
     )}
 
-    {/* Mobile Bottom Sheet */}
-    <MobileBottomSheet
-      isOpen={bottomSheet.isOpen}
-      onClose={bottomSheet.close}
-      title="Gespeicherte Beiträge"
-      snapPoints={[0.5, 0.95]}
-      defaultSnapPoint={0}
-    >
-      <SavedPosts
-        onCollapse={() => {}}
-        refreshKey={refreshKey}
-        isAuthenticated={!!userEmail}
-        onLoginClick={() => {
-          bottomSheet.close();
-          setLoginOpen(true);
-        }}
-      />
-    </MobileBottomSheet>
     </>
   );
 }
