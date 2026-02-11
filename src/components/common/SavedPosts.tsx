@@ -250,7 +250,7 @@ const SavedPostsComponent = function SavedPosts({ onCollapse, refreshKey, isAuth
   return (
     <>
   {/* Mobile: Bottom drawer */}
-  <div data-save-target className={`lg:hidden fixed bottom-0 left-0 right-0 bg-white shadow-lg transition-transform duration-300 z-40 ${isCollapsed ? 'translate-y-[calc(100%-3rem)]' : 'translate-y-0'}`} style={{ maxHeight: '60vh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+  <div data-save-target className={`lg:hidden fixed bottom-12 md:bottom-0 left-0 right-0 bg-white shadow-lg transition-transform duration-300 z-40 ${isCollapsed ? 'translate-y-[calc(100%-3rem)]' : 'translate-y-0'}`} style={{ maxHeight: '60vh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
   <div className="flex items-center justify-between p-3 border-b">
           <h2 className="text-lg font-bold text-gray-800">Gespeicherte Beiträge</h2>
           <div className="flex items-center gap-1">

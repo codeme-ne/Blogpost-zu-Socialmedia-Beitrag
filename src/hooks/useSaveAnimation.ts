@@ -22,8 +22,12 @@ function prefersReducedMotion(): boolean {
 }
 
 function getTargetRect(): DOMRect | null {
-  const target = document.querySelector('[data-save-target]')
-  return target ? target.getBoundingClientRect() : null
+  const targets = document.querySelectorAll('[data-save-target]')
+  for (const target of targets) {
+    const rect = target.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) return rect
+  }
+  return null
 }
 
 export function useSaveAnimation() {
