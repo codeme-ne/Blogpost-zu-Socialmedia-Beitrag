@@ -126,7 +126,7 @@ export function UnifiedLayout({
             </div>
 
             {/* Column 3: Saved Posts */}
-            <div className="overflow-y-auto bg-gray-50/50" data-save-target>
+            <div className="overflow-y-auto bg-gray-50/30" data-save-target>
               {savedPostsArea ? (
                 savedPostsArea
               ) : (

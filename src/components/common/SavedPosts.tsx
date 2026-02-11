@@ -198,10 +198,10 @@ const SavedPostsComponent = function SavedPosts({ refreshKey, isAuthenticated, o
   return (
     <div className={`h-full flex flex-col ${highlighted ? 'animate-targetPulse' : ''}`}>
       {/* Header */}
-      <div className="flex items-center justify-between h-12 px-3 border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <h2 className="text-sm font-semibold text-gray-800">
+      <div className="flex items-center justify-between sticky top-0 z-10 bg-gray-50/80 backdrop-blur-sm border-b px-4 py-2">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Gespeichert
-        </h2>
+        </span>
         {savedPosts.length > 0 && (
           <Badge variant="secondary" className="text-xs px-1.5 py-0">
             {savedPosts.length}
@@ -210,7 +210,7 @@ const SavedPostsComponent = function SavedPosts({ refreshKey, isAuthenticated, o
       </div>
 
       {/* Content area */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {!isAuthenticated ? (
           <div className="p-3 rounded-lg border border-gray-200 bg-white text-center space-y-2">
             <p className="text-sm text-gray-700">Bitte logge dich ein, um gespeicherte Beiträge zu sehen.</p>
