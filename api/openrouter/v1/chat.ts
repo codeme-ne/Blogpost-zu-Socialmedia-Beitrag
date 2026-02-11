@@ -2,6 +2,8 @@ import { createCorsResponse, handlePreflight } from '../../utils/cors.js';
 import { parseJsonSafely } from '../../utils/safeJson.js';
 import { verifyJWT, getServerDatabases, DB_ID, Query } from '../../utils/appwrite.js';
 import { checkRateLimit, getClientIp } from '../../utils/rateLimit.js';
+import { ensureTracing, getTracer, SpanStatusCode } from '../../utils/tracing.js';
+import { runGuardrailCheck } from '../../utils/guardrail.js';
 
 export const config = {
   runtime: 'edge',
@@ -187,8 +189,23 @@ export default async function handler(req: Request) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
+    ensureTracing();
+    const tracer = getTracer();
+
     try {
       const openRouterBody = transformRequestToOpenRouter(body);
+      const requestModel = openRouterBody.model as string;
+
+      const span = tracer.startSpan('gen_ai.chat', {
+        attributes: {
+          'gen_ai.system': 'openrouter',
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.request.model': requestModel,
+          'gen_ai.request.max_tokens': (openRouterBody.max_tokens as number) || 0,
+          'gen_ai.request.temperature': (openRouterBody.temperature as number) || 0,
+          'user.is_premium': isPremium,
+        },
+      });
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -208,6 +225,13 @@ export default async function handler(req: Request) {
         const errorData = await response.json().catch(() => ({
           error: { message: 'Unknown error' }
         }));
+
+        span.setAttributes({
+          'gen_ai.response.error': true,
+          'gen_ai.response.status': response.status,
+        });
+        span.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${response.status}` });
+        span.end();
 
         if (response.status === 429) {
           return createCorsResponse({
@@ -250,8 +274,21 @@ export default async function handler(req: Request) {
         throw new Error(`OpenRouter API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
       }
 
-      const openRouterData = await response.json();
+      const openRouterData = await response.json() as Record<string, unknown>;
       const anthropicFormatData = transformResponseToAnthropic(openRouterData);
+
+      // Log gen_ai semantic convention attributes from response
+      const choices = openRouterData.choices as Array<{ finish_reason?: string }> | undefined;
+      const usage = openRouterData.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+      span.setAttributes({
+        'gen_ai.response.model': (openRouterData.model as string) || requestModel,
+        'gen_ai.usage.input_tokens': usage?.prompt_tokens || 0,
+        'gen_ai.usage.output_tokens': usage?.completion_tokens || 0,
+        'gen_ai.usage.total_tokens': usage?.total_tokens || 0,
+        'gen_ai.response.finish_reason': choices?.[0]?.finish_reason || '',
+      });
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
 
       if (!isPremium) {
         const { ID } = await import('node-appwrite');
@@ -259,6 +296,13 @@ export default async function handler(req: Request) {
           user_id: user.id,
           generated_at: new Date().toISOString(),
         }).catch(() => { /* non-critical */ });
+      }
+
+      // Fire-and-forget guardrail check — runs async, does not block user response
+      const sourceText = body.sourceText as string | undefined;
+      const generatedText = (anthropicFormatData.content as Array<{ text?: string }>)?.[0]?.text;
+      if (sourceText && generatedText) {
+        runGuardrailCheck(sourceText, generatedText, apiKey, origin).catch(() => { /* non-critical */ });
       }
 
       return createCorsResponse(anthropicFormatData, { status: 200, origin });

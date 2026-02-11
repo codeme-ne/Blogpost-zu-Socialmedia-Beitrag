@@ -237,6 +237,7 @@ export const useContentGeneration = () => {
         messages: [
           { role: 'user', content: prompt },
         ],
+        sourceText: content,
       }, { timeout: 25000 })
 
       // Type guard: validate response structure before accessing text

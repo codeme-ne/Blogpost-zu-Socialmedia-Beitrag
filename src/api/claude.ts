@@ -20,6 +20,7 @@ export async function linkedInPostsFromNewsletter(content: string) {
      max_tokens: 4096,
      temperature: 0.85,
      messages: [{ role: 'user', content: prompt }],
+     sourceText: content,
    });
 
    const text = extractText(response);
@@ -97,6 +98,7 @@ export async function xTweetsFromBlog(content: string) {
       max_tokens: 280,
       temperature: 0.65,
       messages: [{ role: 'user', content: prompt }],
+      sourceText: content,
     });
 
     const text = extractText(response).trim();
@@ -120,6 +122,7 @@ export async function instagramPostsFromBlog(content: string) {
       max_tokens: 4096,
       temperature: 0.85,
       messages: [{ role: 'user', content: prompt }],
+      sourceText: content,
     });
 
     const text = extractText(response);
@@ -176,6 +179,7 @@ export async function batchedPostsFromContent(
       max_tokens: 4096,
       temperature: 0.85,
       messages: [{ role: 'user', content: prompt }],
+      sourceText: content,
     });
 
     const text = extractText(response);

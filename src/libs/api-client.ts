@@ -306,6 +306,7 @@ export interface OpenRouterMessageRequestBody {
   max_tokens: number;
   temperature?: number;
   messages: OpenRouterMessageRequestMessage[];
+  sourceText?: string;
 }
 
 export interface OpenRouterContentBlock {
