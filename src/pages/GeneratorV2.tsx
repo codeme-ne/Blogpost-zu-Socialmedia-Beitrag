@@ -51,6 +51,7 @@ export default function GeneratorV2() {
   // Local UI state only
   const [refreshKey, setRefreshKey] = useState(0);
   const [mobileTab, setMobileTab] = useState<MobileTab>('input');
+  const [extractorTab, setExtractorTab] = useState<'url' | 'text'>('url');
   const prevPostCountRef = useRef(0);
 
   // Custom hooks
@@ -148,6 +149,7 @@ export default function GeneratorV2() {
           .join("\n\n");
         actions.completeExtraction(prefill);
         actions.setSourceUrl(url);
+        setExtractorTab('text');
 
         perfMonitor.mark(PERF_MARKS.EXTRACTION_END);
         perfMonitor.measure(PERF_MEASURES.EXTRACTION_DURATION, PERF_MARKS.EXTRACTION_START, PERF_MARKS.EXTRACTION_END);
@@ -245,6 +247,8 @@ export default function GeneratorV2() {
         onContentExtracted={handleExtract}
         onTextInput={actions.setInputText}
         isExtracting={state.isExtracting}
+        activeTab={extractorTab}
+        onTabChange={setExtractorTab}
       />
 
       {state.inputText.trim() && (
@@ -270,7 +274,7 @@ export default function GeneratorV2() {
         </Card>
       )}
     </div>
-  ), [state.inputText, state.isExtracting, handleExtract, actions]);
+  ), [state.inputText, state.isExtracting, handleExtract, actions, extractorTab]);
 
   // Output Area with PlatformPreviewCards
   const OutputArea = useMemo(() => {

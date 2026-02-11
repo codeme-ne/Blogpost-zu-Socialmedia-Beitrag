@@ -23,6 +23,8 @@ interface EnhancedUrlExtractorProps {
   onContentExtracted: (url: string) => void;
   onTextInput: (text: string) => void;
   isExtracting?: boolean;
+  activeTab?: 'url' | 'text';
+  onTabChange?: (tab: 'url' | 'text') => void;
   className?: string;
 }
 
@@ -31,10 +33,19 @@ const EnhancedUrlExtractorComponent = ({
   onContentExtracted,
   onTextInput,
   isExtracting = false,
+  activeTab: controlledTab,
+  onTabChange,
   className,
 }: EnhancedUrlExtractorProps) => {
   const [url, setUrl] = useState('');
-  const [activeTab, setActiveTab] = useState<'url' | 'text'>('url');
+  const [internalTab, setInternalTab] = useState<'url' | 'text'>('url');
+
+  // Support both controlled and uncontrolled tab state
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = (tab: 'url' | 'text') => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
 
   const handleExtract = () => {
     if (!url.trim()) {
