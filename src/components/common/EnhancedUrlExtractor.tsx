@@ -147,12 +147,21 @@ const EnhancedUrlExtractorComponent = ({
 
           <TabsContent value="text" className="space-y-4 mt-6">
             <div className="space-y-3">
-              <textarea
-                placeholder="Füge deinen Newsletter, Blog-Artikel oder anderen Content hier ein..."
-                value={value}
-                onChange={(e) => onTextInput(e.target.value)}
-                className="w-full min-h-[200px] p-4 rounded-lg border bg-background resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-              />
+              <div className="relative">
+                <textarea
+                  placeholder="Füge deinen Newsletter, Blog-Artikel oder anderen Content hier ein..."
+                  value={value}
+                  onChange={(e) => onTextInput(e.target.value)}
+                  className="w-full min-h-[200px] max-h-[70vh] p-4 rounded-lg border bg-background resize-y focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                />
+                {/* Visual resize hint */}
+                <div className="absolute bottom-1.5 right-2 pointer-events-none text-muted-foreground/40">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                    <path d="M9 1v8H1" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M9 5v4H5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </div>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
                   {value.length} Zeichen
