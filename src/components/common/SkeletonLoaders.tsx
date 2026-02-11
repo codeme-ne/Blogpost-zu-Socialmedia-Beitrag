@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import type { ExtractionStage } from '@/api/extract';
 
 interface SkeletonProps {
   className?: string;
@@ -172,23 +173,34 @@ interface LoadingStateProps {
   message?: string;
   subMessage?: string;
   progress?: number;
+  extractionStage?: ExtractionStage | 'idle';
   className?: string;
 }
+
+const EXTRACTION_STEPS = [
+  { stage: 'validating' as const, label: 'URL validieren...' },
+  { stage: 'fetching' as const, label: 'Webseite laden...' },
+  { stage: 'processing' as const, label: 'Content verarbeiten...' },
+  { stage: 'complete' as const, label: 'Fertig!' },
+] as const;
+
+const STAGE_ORDER: Record<string, number> = {
+  idle: -1,
+  validating: 0,
+  fetching: 1,
+  processing: 2,
+  complete: 3,
+  error: -1,
+};
 
 export function ExtractingContent({
   message = "Analysiere Content...",
   subMessage = "Dies kann bis zu 30 Sekunden dauern",
   progress,
+  extractionStage = 'idle',
   className
 }: LoadingStateProps) {
-  const steps = [
-    "Lade Webseite...",
-    "Extrahiere Hauptinhalt...",
-    "Bereinige Formatierung...",
-    "Optimiere für KI-Verarbeitung..."
-  ];
-
-  const currentStep = progress ? Math.floor((progress / 100) * steps.length) : 0;
+  const stageIndex = STAGE_ORDER[extractionStage] ?? -1;
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -200,35 +212,51 @@ export function ExtractingContent({
         <p className="text-sm text-muted-foreground">{subMessage}</p>
       </div>
 
-      {/* Step Progress */}
+      {/* Step Progress - driven by real server stages */}
       <div className="space-y-2">
-        {steps.map((step, index) => (
-          <div
-            key={index}
-            className={cn(
-              "flex items-center gap-3 text-sm",
-              index <= currentStep ? "text-foreground" : "text-muted-foreground/50"
-            )}
-          >
-            <div className={cn(
-              "h-2 w-2 rounded-full",
-              index < currentStep ? "bg-primary" :
-              index === currentStep ? "bg-primary animate-pulse" : "bg-muted"
-            )} />
-            <span>{step}</span>
-          </div>
-        ))}
+        {EXTRACTION_STEPS.map((step, index) => {
+          const isCompleted = index < stageIndex;
+          const isActive = index === stageIndex;
+          const isPending = index > stageIndex;
+
+          return (
+            <div
+              key={step.stage}
+              className={cn(
+                "flex items-center gap-3 text-sm transition-all duration-300",
+                isPending && "text-muted-foreground/40",
+                isActive && "text-foreground font-medium",
+                isCompleted && "text-foreground"
+              )}
+            >
+              <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+                {isCompleted && (
+                  <svg className="w-4 h-4 text-primary" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zm3.78 4.97a.75.75 0 0 0-1.06 0L7 8.69 5.28 6.97a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25a.75.75 0 0 0 0-1.06z"/>
+                  </svg>
+                )}
+                {isActive && (
+                  <div className="h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
+                )}
+                {isPending && (
+                  <div className="h-2 w-2 rounded-full bg-muted" />
+                )}
+              </div>
+              <span>{step.label}</span>
+            </div>
+          );
+        })}
       </div>
 
       {progress !== undefined && (
         <div className="space-y-1">
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full bg-primary transition-all duration-500 ease-out rounded-full"
+              className="h-full bg-primary transition-all duration-700 ease-out rounded-full"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-xs text-center text-muted-foreground">{progress}%</p>
+          <p className="text-xs text-center text-muted-foreground">{Math.round(progress)}%</p>
         </div>
       )}
     </div>

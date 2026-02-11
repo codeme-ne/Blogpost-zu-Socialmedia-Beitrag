@@ -111,6 +111,65 @@ import { isUrlSafe } from './utils/urlValidation.js';
 import { verifyJWT } from './utils/appwrite.js';
 import { checkRateLimit, getClientIp } from './utils/rateLimit.js';
 
+// SSE helper: format a Server-Sent Event
+function sseEvent(stage: string, data?: Record<string, unknown>): string {
+  return `data: ${JSON.stringify({ stage, ...data })}\n\n`;
+}
+
+// Phase 1: Fetch raw content from Jina Reader
+async function fetchFromJina(url: string, signal: AbortSignal): Promise<string> {
+  const jinaUrl = `https://r.jina.ai/${encodeURIComponent(url)}`;
+
+  // NOTE: Some Jina Reader edges reject custom browser User-Agent strings with 403.
+  // Keep headers minimal and retry without custom extraction headers on auth/forbidden.
+  let response = await fetch(jinaUrl, {
+    headers: {
+      'Accept': 'text/markdown, text/plain',
+      'x-remove-selector': 'nav,header,footer,.newsletter,.subscribe,.archive,.sidebar,.social',
+      'x-respond-with': 'markdown',
+    },
+    signal,
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    response = await fetch(jinaUrl, { signal });
+  }
+
+  if (!response.ok) {
+    throw new Error(`Content extraction failed with status: ${response.status}`);
+  }
+
+  const content = await response.text();
+
+  if (!content || content.trim().length < 100) {
+    throw Object.assign(new Error('Could not extract meaningful content from the URL'), { statusCode: 422 });
+  }
+
+  return content;
+}
+
+// Phase 2: Process raw content into structured response
+function processContent(rawContent: string, url: string): ExtractResponse {
+  const content = truncateContent(rawContent);
+
+  const titleMatch = content.match(/^#\s+(.+?)$/m);
+  const title = titleMatch ? titleMatch[1].trim() : undefined;
+
+  const urlObj = new URL(url);
+  const siteName = urlObj.hostname.replace(/^www\./, '');
+
+  const cleanContent = content.replace(/\n{3,}/g, '\n\n').trim();
+
+  return {
+    title,
+    byline: null,
+    excerpt: null,
+    content: cleanContent,
+    length: cleanContent.length,
+    siteName,
+  };
+}
+
 export default async function handler(req: Request) {
   // Get CORS headers
   const origin = req.headers.get('origin');
@@ -127,6 +186,9 @@ export default async function handler(req: Request) {
       headers: { ...cors, 'Content-Type': 'application/json' },
     });
   }
+
+  // Determine if client wants SSE streaming
+  const wantsStream = req.headers.get('accept')?.includes('text/event-stream');
 
   try {
     // Rate limiting: 30 requests per minute per IP
@@ -157,7 +219,7 @@ export default async function handler(req: Request) {
     }
 
     const { url } = (await req.json()) as { url?: string };
-    
+
     if (!url || typeof url !== 'string') {
       return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
         status: 400,
@@ -174,80 +236,67 @@ export default async function handler(req: Request) {
       });
     }
 
-    // Use Jina Reader for content extraction
-    const jinaUrl = `https://r.jina.ai/${encodeURIComponent(url)}`;
-    
-    console.log('Fetching content from:', url);
-    
     // Create an AbortController for timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-    
-    try {
-      // NOTE: Some Jina Reader edges reject custom browser User-Agent strings with 403.
-      // Keep headers minimal and retry without custom extraction headers on auth/forbidden.
-      let response = await fetch(jinaUrl, {
-        headers: {
-          'Accept': 'text/markdown, text/plain',
-          // Use Jina's selector cleanup where supported
-          'x-remove-selector': 'nav,header,footer,.newsletter,.subscribe,.archive,.sidebar,.social',
-          'x-respond-with': 'markdown',
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    // --- SSE STREAMING PATH ---
+    if (wantsStream) {
+      const stream = new ReadableStream({
+        async start(streamController) {
+          const encoder = new TextEncoder();
+          const send = (stage: string, data?: Record<string, unknown>) => {
+            streamController.enqueue(encoder.encode(sseEvent(stage, data)));
+          };
+
+          try {
+            send('validating', { message: 'URL wird validiert...' });
+
+            send('fetching', { message: 'Lade Webseite über Jina Reader...' });
+            const rawContent = await fetchFromJina(url, controller.signal);
+            clearTimeout(timeoutId);
+
+            send('processing', { message: 'Verarbeite und bereinige Content...' });
+            const payload = processContent(rawContent, url);
+
+            send('complete', { data: payload });
+          } catch (err) {
+            clearTimeout(timeoutId);
+            const isTimeout = err instanceof Error && err.name === 'AbortError';
+            const message = isTimeout
+              ? 'Request timed out. The page took too long to load.'
+              : err instanceof Error ? err.message : 'Failed to extract content';
+            send('error', { message });
+          } finally {
+            streamController.close();
+          }
         },
-        signal: controller.signal,
       });
 
-      if (response.status === 401 || response.status === 403) {
-        response = await fetch(jinaUrl, { signal: controller.signal });
-      }
-      
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          ...cors,
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // --- NON-STREAMING FALLBACK ---
+    try {
+      const rawContent = await fetchFromJina(url, controller.signal);
       clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        console.error(`Jina Reader returned status: ${response.status}`);
-        throw new Error(`Content extraction failed with status: ${response.status}`);
-      }
-      
-      let content = await response.text();
-      
-      // Basic content validation
-      if (!content || content.trim().length < 100) {
-        return new Response(
-          JSON.stringify({ error: 'Could not extract meaningful content from the URL' }),
-          { status: 422, headers: { ...cors, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      // Apply truncation to remove footer/archive sections
-      content = truncateContent(content);
-      
-      // Extract title from first markdown heading if present
-      const titleMatch = content.match(/^#\s+(.+?)$/m);
-      const title = titleMatch ? titleMatch[1].trim() : undefined;
-      
-      // Extract site name from URL
-      const urlObj = new URL(url);
-      const siteName = urlObj.hostname.replace(/^www\./, '');
-      
-      // Clean up content - remove excessive line breaks
-      const cleanContent = content.replace(/\n{3,}/g, '\n\n').trim();
-      
-      const payload: ExtractResponse = {
-        title,
-        byline: null, // Jina doesn't typically provide byline
-        excerpt: null, // Could extract from first paragraph if needed
-        content: cleanContent,
-        length: cleanContent.length,
-        siteName,
-      };
-      
+      const payload = processContent(rawContent, url);
+
       return new Response(JSON.stringify(payload), {
         status: 200,
         headers: { ...cors, 'Content-Type': 'application/json' },
       });
-      
     } catch (fetchError) {
+      clearTimeout(timeoutId);
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        console.error('Request timeout after 30 seconds');
         return new Response(
           JSON.stringify({ error: 'Request timed out. The page took too long to load.' }),
           { status: 504, headers: { ...cors, 'Content-Type': 'application/json' } }
@@ -255,22 +304,21 @@ export default async function handler(req: Request) {
       }
       throw fetchError;
     }
-    
+
   } catch (error) {
     console.error('Extract error:', error);
-    
-    // Return user-friendly error message
+
     const errorMessage = error instanceof Error ? error.message : 'Failed to extract content';
-    const statusCode = 500;
-    
+    const statusCode = (error as { statusCode?: number }).statusCode || 500;
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: errorMessage,
         details: 'Unable to extract content from this URL. Please ensure the URL is accessible and contains readable content.'
       }),
-      { 
-        status: statusCode, 
-        headers: { ...cors, 'Content-Type': 'application/json' } 
+      {
+        status: statusCode,
+        headers: { ...cors, 'Content-Type': 'application/json' }
       }
     );
   }

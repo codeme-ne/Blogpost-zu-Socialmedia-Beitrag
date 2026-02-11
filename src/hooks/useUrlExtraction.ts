@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { extractFromUrl } from '@/api/extract'
+import { extractFromUrlStreaming, type ExtractionStage } from '@/api/extract'
 
 interface ExtractionResult {
   title: string
@@ -24,8 +24,9 @@ const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 export const useUrlExtraction = () => {
   const [isExtracting, setIsExtracting] = useState(false)
+  const [extractionStage, setExtractionStage] = useState<ExtractionStage | 'idle'>('idle')
 
-  const extractContent = async (sourceUrl: string): Promise<ExtractionResult | null> => {
+  const extractContent = useCallback(async (sourceUrl: string): Promise<ExtractionResult | null> => {
     if (!sourceUrl.trim()) return null
 
     // Check cache first
@@ -37,10 +38,17 @@ export const useUrlExtraction = () => {
     }
 
     setIsExtracting(true)
+    setExtractionStage('idle')
 
     try {
-      // Standard extraction with Jina Reader
-      const extractResult = await extractFromUrl(sourceUrl)
+      const extractResult = await extractFromUrlStreaming(sourceUrl, (event) => {
+        if (event.stage !== 'complete') {
+          setExtractionStage(event.stage)
+        }
+      })
+
+      setExtractionStage('complete')
+
       const result: ExtractionResult = {
         title: extractResult.title || "",
         content: extractResult.content || ""
@@ -65,15 +73,17 @@ export const useUrlExtraction = () => {
 
       return result
     } catch (e) {
+      setExtractionStage('error')
       toast.error(`Import fehlgeschlagen - ${e instanceof Error ? e.message : String(e)}`)
       return null
     } finally {
       setIsExtracting(false)
     }
-  }
+  }, [])
 
   return {
     isExtracting,
+    extractionStage,
     extractContent,
   }
 }

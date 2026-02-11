@@ -57,7 +57,7 @@ export default function GeneratorV2() {
   const { userEmail, loginOpen, setLoginOpen } = useAuth();
   useSubscription();
   useUsageTracking();
-  const { extractContent } = useUrlExtraction();
+  const { extractContent, extractionStage } = useUrlExtraction();
   const saveAnimation = useSaveAnimation();
 
   // Feature flag check
@@ -125,6 +125,13 @@ export default function GeneratorV2() {
       });
     }
   }, [state.errors]);
+
+  // Sync extraction stage from hook into state machine
+  useEffect(() => {
+    if (extractionStage !== 'idle') {
+      actions.setExtractionStage(extractionStage);
+    }
+  }, [extractionStage, actions]);
 
   // URL extraction handler
   const handleExtract = useCallback(async (url: string) => {
@@ -275,7 +282,7 @@ export default function GeneratorV2() {
         {/* Loading Overlays */}
         {state.isExtracting && (
           <div className="absolute inset-0 z-10 bg-background/95 backdrop-blur-sm rounded-lg border border-border/50 flex items-center justify-center">
-            <ExtractingContent progress={state.extractionProgress} />
+            <ExtractingContent progress={state.extractionProgress} extractionStage={state.extractionStage} />
           </div>
         )}
 
@@ -356,7 +363,7 @@ export default function GeneratorV2() {
         </div>
       </div>
     );
-  }, [state.isExtracting, state.extractionProgress, state.generationProgress, state.postsByPlatform, state.editingPost,
+  }, [state.isExtracting, state.extractionProgress, state.extractionStage, state.generationProgress, state.postsByPlatform, state.editingPost,
       computed.isGeneratingAny, computed.isEditing, computed.editingPlatform, computed.editingIndex,
       handleSaveEdit, handleSavePost, handleLinkedInShare, actions]);
 

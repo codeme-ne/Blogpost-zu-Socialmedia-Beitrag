@@ -1,6 +1,17 @@
 import { useReducer, useCallback, useEffect } from 'react';
 import type { Platform } from '@/config/platforms';
 import type { WorkflowStep } from '@/components/common/WorkflowStepper';
+import type { ExtractionStage } from '@/api/extract';
+
+// Stage → progress percentage mapping (module-level for reuse without recreation)
+const STAGE_PROGRESS: Record<string, number> = {
+  idle: 0,
+  validating: 15,
+  fetching: 40,
+  processing: 75,
+  complete: 100,
+  error: 0,
+};
 
 // Types
 export interface GeneratedPost {
@@ -39,6 +50,7 @@ export interface PostGeneratorState {
   isExtracting: boolean;
   isGenerating: Set<Platform>;
   extractionProgress: number;
+  extractionStage: ExtractionStage | 'idle';
   generationProgress: {
     current: Platform | null;
     completed: number;
@@ -72,6 +84,7 @@ type PostGeneratorAction =
   | { type: 'FAIL_GENERATION'; platform: Platform; error: string }
   | { type: 'SET_GENERATION_PROGRESS'; current: Platform | null; completed: number; total: number }
   | { type: 'SET_EXTRACTION_PROGRESS'; progress: number }
+  | { type: 'SET_EXTRACTION_STAGE'; stage: ExtractionStage | 'idle' }
   | { type: 'MARK_SAVED' }
   | { type: 'RESET_WORKFLOW' }
   | { type: 'CLEAR_ERRORS' }
@@ -99,6 +112,7 @@ const initialState: PostGeneratorState = {
   isExtracting: false,
   isGenerating: new Set(),
   extractionProgress: 0,
+  extractionStage: 'idle',
   generationProgress: {
     current: null,
     completed: 0,
@@ -199,6 +213,7 @@ function handleExtractionActions(
         ...state,
         isExtracting: true,
         extractionProgress: 0,
+        extractionStage: 'idle',
         errors: { ...state.errors, extraction: undefined },
       };
 
@@ -208,6 +223,7 @@ function handleExtractionActions(
         inputText: action.content,
         isExtracting: false,
         extractionProgress: 100,
+        extractionStage: 'complete',
         completedSteps: [...new Set([...state.completedSteps, 'input'])] as WorkflowStep[],
         currentStep: 'generate',
         errors: { ...state.errors, extraction: undefined },
@@ -218,6 +234,7 @@ function handleExtractionActions(
         ...state,
         isExtracting: false,
         extractionProgress: 0,
+        extractionStage: 'error',
         errors: { ...state.errors, extraction: action.error },
       };
 
@@ -225,6 +242,13 @@ function handleExtractionActions(
       return {
         ...state,
         extractionProgress: action.progress,
+      };
+
+    case 'SET_EXTRACTION_STAGE':
+      return {
+        ...state,
+        extractionStage: action.stage,
+        extractionProgress: STAGE_PROGRESS[action.stage] ?? state.extractionProgress,
       };
 
     default:
@@ -559,6 +583,10 @@ export function usePostGeneratorState() {
 
     setExtractionProgress: useCallback((progress: number) => {
       dispatch({ type: 'SET_EXTRACTION_PROGRESS', progress });
+    }, []),
+
+    setExtractionStage: useCallback((stage: ExtractionStage | 'idle') => {
+      dispatch({ type: 'SET_EXTRACTION_STAGE', stage });
     }, []),
 
     markSaved: useCallback(() => {
