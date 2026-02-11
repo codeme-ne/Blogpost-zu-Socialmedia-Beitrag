@@ -167,7 +167,7 @@ export default function Settings() {
 
       {/* Desktop Header */}
       <header className="hidden md:block border-b border-border/50 bg-background/70 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-8 py-8">
+        <div className="max-w-6xl mx-auto px-8 py-6">
           <div className="flex items-center justify-between">
             <div className="space-y-2">
               <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
@@ -193,7 +193,7 @@ export default function Settings() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto p-4 md:p-8">
-        <div className="grid gap-6 md:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 auto-rows-fr">
+        <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           
           {/* Account Card */}
           <section aria-labelledby="account-heading" className="col-span-1">
@@ -421,12 +421,12 @@ export default function Settings() {
                       <Link to="/app?expand=saved" className="block group">
                         <Button
                           variant="outline"
-                          className="w-full justify-start gap-3 h-auto py-3 group-hover:border-primary/50 transition-colors"
+                          className="w-full justify-start gap-3 h-auto py-3 group-hover:border-primary/50 group-hover:bg-accent group-hover:text-accent-foreground transition-colors"
                         >
-                          <FileHeart className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                          <FileHeart className="h-4 w-4 text-muted-foreground group-hover:text-accent-foreground" />
                           <div className="text-left">
                             <div className="font-medium">Gespeicherte Posts</div>
-                            <div className="text-xs text-muted-foreground">Deine gespeicherten Inhalte</div>
+                            <div className="text-xs text-muted-foreground group-hover:text-accent-foreground/80">Deine gespeicherten Inhalte</div>
                           </div>
                         </Button>
                       </Link>
@@ -466,23 +466,23 @@ export default function Settings() {
                 <Button
                   variant="outline"
                   onClick={() => window.open(`mailto:${env.app.supportEmail}`, "_blank", "noopener,noreferrer")}
-                  className="gap-2 justify-start"
+                  className="gap-2 justify-start hover:text-accent-foreground"
                 >
                   <Mail className="h-4 w-4" />
                   E-Mail Support
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   onClick={() => window.open("/privacy", "_blank", "noopener,noreferrer")}
-                  className="gap-2 justify-start"
+                  className="gap-2 justify-start hover:text-accent-foreground"
                 >
                   <Shield className="h-4 w-4" />
                   Datenschutz
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   onClick={() => window.open("/imprint", "_blank", "noopener,noreferrer")}
-                  className="gap-2 justify-start"
+                  className="gap-2 justify-start hover:text-accent-foreground"
                 >
                   <FileText className="h-4 w-4" />
                   Impressum
@@ -493,7 +493,7 @@ export default function Settings() {
           </section>
 
           {/* Danger Zone - Full Width */}
-          <section aria-labelledby="danger-zone-heading" className="col-span-1 md:col-span-2 lg:col-span-3 mt-8">
+          <section aria-labelledby="danger-zone-heading" className="col-span-1 md:col-span-2 lg:col-span-3 mt-2">
             <Card className="border-2 border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20 shadow-lg">
               <CardHeader className="pb-4">
                 <div className="flex items-center gap-3">
@@ -575,7 +575,7 @@ export default function Settings() {
         </div>
 
         {/* Premium Footer */}
-        <footer className="mt-12 md:mt-16">
+        <footer className="mt-8 md:mt-10">
           <div className="border-t border-border/50 pt-8 pb-6">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
